@@ -1,0 +1,23 @@
+Evaluate {{gene}} as a plausible contributor to {{phenotype}} in the approved species scope. Use the retained abstracts, selected full texts, gene-function records and separate GWAS Catalog captures. Classifier labels select sources; they are not findings or evidence grades.
+
+Write at most 800 words excluding citations, unless the user specifies otherwise. Use direct, neutral scientific prose and the following structure:
+
+1. Gene function
+Briefly describe the gene's main function, with links to the saved NCBI Gene and WikiGenes records.
+
+2. Anatomical expression
+In two or three sentences, describe whether expression is widespread or restricted across tissues and relevant brain regions, and which neuronal, glial or other cell types express it. Distinguish enrichment from cell-type specificity, and RNA from protein evidence; identify the species and cite the sources. Do not infer restricted expression from limited sampling or targeted manipulation. State when distribution or specificity is not established by the available sources.
+
+3. Scope
+Briefly state the phenotype, evidence species, prioritized concept domains, other concepts searched, retrieval caps and material source gaps. Keep methods short and devote most words to evidence.
+
+4. Evidence and mechanism
+Assess direct evidence and gene-to-pathway-to-phenotype or gene-to-gene-to-phenotype chains. Cite each empirical link with an adjacent verified PMID and reopen its original source. Preserve gene/channel identity, model, tissue or cell type, manipulation, measured outcome and direction. Distinguish expression, cellular activity, reward, intake, dependence, withdrawal, seeking and cessation. Identify inferred or unsupported steps and include conflicting and null findings. Place specific caveats beside the findings they qualify. Use reviews for context, label preprints and do not count linked versions or repeated concept memberships as independent studies.
+
+5. Genetic associations
+Report the separate GWAS Catalog results or blocker, with trait definitions, variants, effect alleles, statistics, study accessions and PMIDs. Gene mapping is locus-level evidence, not causal assignment. Do not infer channel activation or inhibition from an association without functional evidence; zero captured records do not prove no effect.
+
+6. Assessment
+End with a balanced candidate-plausibility judgment, the best-supported mechanism and the remaining unsupported links. Distinguish plausibility from causality, necessity or sufficiency. Do not open with the conclusion or add a generic limitations section.
+
+Save the synthesis and source-review/claim ledger with source versions, checksums and passage locations. State the limits of source review and publication-status checks.

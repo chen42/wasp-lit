@@ -1,0 +1,16 @@
+{
+  "_fixture": "Synthetic human-reference context for the GWAS Catalog association lane. Gene names and phenotype are invented.",
+  "synthetic": true,
+  "genes": [
+    {"symbol": "WASP_TEST_GENE", "aliases": ["WASP_TEST_GENE"], "identity_source": "synthetic human Ensembl identity for offline testing"},
+    {"symbol": "WASP_OTHER_GENE", "aliases": ["WASP_OTHER_GENE"], "identity_source": "synthetic human Ensembl identity for offline testing"}
+  ],
+  "phenotype": "synthetic behavioral phenotype",
+  "phenotype_terms": ["synthetic behavioral phenotype"],
+  "reference_organism": "Homo sapiens, synthetic test identity",
+  "evidence_species": "human only, synthetic test scope",
+  "concept_ids": ["test/stress"],
+  "abstract_cap": 200,
+  "fulltext_quota": 10,
+  "query_filter": ""
+}

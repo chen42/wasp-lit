@@ -1,0 +1,12 @@
+{
+  "synthetic": true,
+  "genes": [{"symbol": "WASP_TEST_GENE", "aliases": ["PTG"], "identity_source": "artificial gene identity for offline testing only"}],
+  "phenotype": "stress-induced operant responding",
+  "phenotype_terms": ["stress"],
+  "reference_organism": "synthetic gene reference, not a real gene",
+  "evidence_species": "all reported species, labeled explicitly; synthetic testing only",
+  "concept_ids": ["test/stress"],
+  "abstract_cap": 200,
+  "fulltext_quota": 10,
+  "query_filter": ""
+}

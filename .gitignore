@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Design, review, and provenance material not needed to run the skill
+abstract.txt
+jev.md
+repo.url
+plan/*
+!plan/ontology-curation.md
+references/sources/
+references/wasp/

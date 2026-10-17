@@ -1,0 +1,117 @@
+{
+  "_fixture": "Synthetic GWAS Catalog MCP envelopes for offline tests. Traits, genes, associations and studies are invented and are not scientific evidence.",
+  "synthetic": true,
+  "captures": {
+    "traits": {
+      "tool": "gwascatalog_get_traits",
+      "query": {"page": 0, "size": 25, "efo_trait": "synthetic behavioral phenotype"},
+      "data": [{"efo_id": "EFO_0000001", "efo_trait": "synthetic behavioral phenotype"}],
+      "pagination": {"page": 0, "size": 25, "total_pages": 1, "total_results": 1, "truncated": false, "has_next_page": false},
+      "message": null,
+      "suggestions": []
+    },
+    "test_gene_page_0": {
+      "tool": "gwascatalog_get_associations",
+      "query": {"page": 0, "size": 2, "efo_id": "EFO_0000001", "mapped_gene": "WASP_TEST_GENE"},
+      "data": [
+        {
+          "association_id": 9000001,
+          "risk_frequency": "0.40",
+          "p_value": 1e-09,
+          "pvalue_description": null,
+          "pvalue_mantissa": 1,
+          "pvalue_exponent": -9,
+          "beta": "0.006 unit increase",
+          "or_value": null,
+          "range": "[0.004-0.008]",
+          "efo_traits": [{"efo_id": "EFO_0000001", "efo_trait": "synthetic behavioral phenotype"}],
+          "reported_trait": ["Synthetic reported trait"],
+          "accession_id": "GCST90000001",
+          "locations": ["1:1000"],
+          "mapped_genes": ["WASP_TEST_GENE", "WASP_TEST_GENE_AS1"],
+          "pubmed_id": "900000010",
+          "first_author": "Fixture A",
+          "snp_effect_allele": ["rs9000001-C"]
+        },
+        {
+          "association_id": 9000002,
+          "risk_frequency": "NR",
+          "p_value": null,
+          "pvalue_description": null,
+          "pvalue_mantissa": null,
+          "pvalue_exponent": null,
+          "beta": "NR",
+          "or_value": "1.20",
+          "range": null,
+          "efo_traits": [{"efo_id": "EFO_0000001", "efo_trait": "synthetic behavioral phenotype"}],
+          "reported_trait": ["Synthetic reported trait"],
+          "accession_id": "GCST90000001",
+          "locations": ["1:2000"],
+          "mapped_genes": ["WASP_TEST_GENE"],
+          "pubmed_id": "900000010",
+          "first_author": "Fixture A",
+          "snp_effect_allele": ["rs9000002-A"]
+        }
+      ],
+      "pagination": {"page": 0, "size": 2, "total_pages": 2, "total_results": 3, "truncated": false, "has_next_page": true},
+      "message": null,
+      "suggestions": []
+    },
+    "test_gene_page_1": {
+      "tool": "gwascatalog_get_associations",
+      "query": {"page": 1, "size": 2, "efo_id": "EFO_0000001", "mapped_gene": "WASP_TEST_GENE"},
+      "data": [
+        {
+          "association_id": 9000003,
+          "risk_frequency": "0.36",
+          "p_value": 5e-12,
+          "pvalue_description": null,
+          "pvalue_mantissa": 5,
+          "pvalue_exponent": -12,
+          "beta": "0.004 unit increase",
+          "or_value": null,
+          "range": "[0.003-0.006]",
+          "efo_traits": [{"efo_id": "EFO_0000001", "efo_trait": "synthetic behavioral phenotype"}],
+          "reported_trait": ["Synthetic reported trait"],
+          "accession_id": "GCST90000002",
+          "locations": ["1:3000"],
+          "mapped_genes": ["WASP_TEST_GENE"],
+          "pubmed_id": "900000011",
+          "first_author": "Fixture B",
+          "snp_effect_allele": ["rs9000003-T"]
+        }
+      ],
+      "pagination": {"page": 1, "size": 2, "total_pages": 2, "total_results": 3, "truncated": false, "has_next_page": false},
+      "message": null,
+      "suggestions": []
+    },
+    "other_gene_empty": {
+      "tool": "gwascatalog_get_associations",
+      "query": {"page": 0, "size": 2, "efo_id": "EFO_0000001", "mapped_gene": "WASP_OTHER_GENE"},
+      "data": [],
+      "pagination": {"page": 0, "size": 2, "total_pages": 0, "total_results": 0, "truncated": false, "has_next_page": false},
+      "message": null,
+      "suggestions": []
+    },
+    "studies": {
+      "tool": "gwascatalog_get_studies",
+      "query": {"page": 0, "size": 25, "accession_id": "GCST90000001"},
+      "data": [
+        {
+          "accession_id": "GCST90000001",
+          "disease_trait": "Synthetic reported trait",
+          "efo_traits": [{"efo_id": "EFO_0000001", "efo_trait": "synthetic behavioral phenotype"}],
+          "initial_sample_size": "1,000 synthetic individuals",
+          "ancestries": [{"type": "initial", "n": 1000, "ancestral_groups": ["European"], "recruitment_countries": ["NR"]}],
+          "pubmed_id": 900000010,
+          "snp_count": 2,
+          "full_summary_stats_available": false,
+          "terms_of_license": "synthetic fixture"
+        }
+      ],
+      "pagination": {"page": 0, "size": 25, "total_pages": 1, "total_results": 1, "truncated": false, "has_next_page": false},
+      "message": null,
+      "suggestions": []
+    }
+  }
+}

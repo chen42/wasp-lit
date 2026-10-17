@@ -1,0 +1,16 @@
+{
+  "_template": true,
+  "genes": [
+    {"symbol": "REPLACE_WITH_GENE", "aliases": [], "identity_source": "REPLACE_WITH_VERIFIED_SOURCE_OR_USER_CONFIRMATION"}
+  ],
+  "phenotype": "REPLACE_WITH_PRECISE_PHENOTYPE",
+  "phenotype_terms": ["REPLACE_WITH_APPROVED_SEARCH_TERM"],
+  "reference_organism": "REPLACE_WITH_REFERENCE_ORGANISM",
+  "evidence_species": "REPLACE_WITH_INCLUDED_SPECIES_OR_EXPLICIT_ALL_SPECIES_SCOPE",
+  "concept_ids": ["addiction/reward", "stress/stress"],
+  "include_all_concepts": true,
+  "abstract_cap": 200,
+  "other_abstract_cap": 30,
+  "fulltext_quota": 10,
+  "query_filter": ""
+}

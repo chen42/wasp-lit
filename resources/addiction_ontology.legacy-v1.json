@@ -1,0 +1,697 @@
+{
+  "concepts": [
+    {
+      "category": "GWAS",
+      "id": "GWAS/addiction",
+      "name": "addiction",
+      "terms": [
+        "addiction",
+        "amphetamine",
+        "cocaine",
+        "drug dependence",
+        "heroin",
+        "methadone",
+        "morphine",
+        "opioid"
+      ]
+    },
+    {
+      "category": "GWAS",
+      "id": "GWAS/alcohol",
+      "name": "alcohol",
+      "terms": [
+        "alcohol"
+      ]
+    },
+    {
+      "category": "GWAS",
+      "id": "GWAS/nicotine",
+      "name": "nicotine",
+      "terms": [
+        "chronic obstructive",
+        "nicotine",
+        "smoking",
+        "tobacco"
+      ]
+    },
+    {
+      "category": "GWAS",
+      "id": "GWAS/psychiatric",
+      "name": "psychiatric",
+      "terms": [
+        "anxiety",
+        "autism",
+        "bipolar",
+        "depression",
+        "mental",
+        "psychiatric",
+        "schizophrenia"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/addiction",
+      "name": "addiction",
+      "terms": [
+        "addiction",
+        "addictive",
+        "compulsive",
+        "drug abuse",
+        "escalation",
+        "punishment"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/aversion",
+      "name": "aversion",
+      "terms": [
+        "aversion",
+        "aversive",
+        "conditioned taste aversion",
+        "CTA"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/dependence",
+      "name": "dependence",
+      "terms": [
+        "dependence"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/intoxication",
+      "name": "intoxication",
+      "terms": [
+        "binge",
+        "intoxication"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/relapse",
+      "name": "relapse",
+      "terms": [
+        "craving",
+        "drug seeking",
+        "reinstatement",
+        "relapse",
+        "seeking"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/reward",
+      "name": "reward",
+      "terms": [
+        "conditioned place preference",
+        "CPP",
+        "drug reinforced",
+        "hedonic",
+        "ICSS",
+        "incentive",
+        "instrumental response",
+        "intracranial self stimulation",
+        "operant",
+        "reinforcement",
+        "reinforcing",
+        "reward",
+        "self administered",
+        "self administration"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/sensitization",
+      "name": "sensitization",
+      "terms": [
+        "behavioral sensitization",
+        "drug sensitization",
+        "incentive sensitization",
+        "locomotor sensitization"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/social",
+      "name": "social",
+      "terms": [
+        "social"
+      ]
+    },
+    {
+      "category": "addiction",
+      "id": "addiction/withdrawal",
+      "name": "withdrawal",
+      "terms": [
+        "withdrawal"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/VTA",
+      "name": "VTA",
+      "terms": [
+        "limbic",
+        "mesoaccumbal",
+        "mesoaccumbens",
+        "mesolimbic",
+        "midbrain",
+        "pvta",
+        "ventral tegmental",
+        "vta"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/accumbens",
+      "name": "accumbens",
+      "terms": [
+        "acbc",
+        "acbs",
+        "accumbal",
+        "accumbens",
+        "core",
+        "Nacc",
+        "NacSh",
+        "shell"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/amygdala",
+      "name": "amygdala",
+      "terms": [
+        "amy",
+        "amygdala",
+        "bla",
+        "cea",
+        "cna"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/cortex",
+      "name": "cortex",
+      "terms": [
+        "cerebral",
+        "cingulate",
+        "cortex",
+        "cortico limbic",
+        "corticolimbic",
+        "corticostriatal",
+        "infralimbic",
+        "insular",
+        "mPFC",
+        "orbitofrontal",
+        "pfc",
+        "prefrontal",
+        "prelimbic",
+        "prl",
+        "vmpfc"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/habenula",
+      "name": "habenula",
+      "terms": [
+        "habenula",
+        "lhb",
+        "mhb"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/hippocampus",
+      "name": "hippocampus",
+      "terms": [
+        "ca1",
+        "ca3",
+        "dentate gyrus",
+        "dhpc",
+        "hip",
+        "hipp",
+        "hippocampal",
+        "hippocampus",
+        "subiculum",
+        "vhipp",
+        "vhpc"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/hypothalamus",
+      "name": "hypothalamus",
+      "terms": [
+        "hypothalamic",
+        "hypothalamus",
+        "LHA",
+        "paraventricular nucleus",
+        "PVN"
+      ]
+    },
+    {
+      "category": "brain",
+      "id": "brain/striatum",
+      "name": "striatum",
+      "terms": [
+        "basal ganglia",
+        "caudate",
+        "globus pallidus",
+        "GPI",
+        "putamen",
+        "STR",
+        "striatal",
+        "striatum"
+      ]
+    },
+    {
+      "category": "cell",
+      "id": "cell/astrocyte",
+      "name": "astrocyte",
+      "terms": [
+        "astrocytes",
+        "astrocytic",
+        "astroglia",
+        "astroglial"
+      ]
+    },
+    {
+      "category": "cell",
+      "id": "cell/endothelium",
+      "name": "endothelium",
+      "terms": [
+        "endothelial cells",
+        "endothelium"
+      ]
+    },
+    {
+      "category": "cell",
+      "id": "cell/microglia",
+      "name": "microglia",
+      "terms": [
+        "microglia",
+        "microglial"
+      ]
+    },
+    {
+      "category": "cell",
+      "id": "cell/neuron",
+      "name": "neuron",
+      "terms": [
+        "adrenergic neurons",
+        "afferent neurons",
+        "amacrine cells",
+        "bipolar neurons",
+        "catecholaminergic neurons",
+        "cholinergic neurons",
+        "CNS neurons",
+        "cortex neurons",
+        "cortical neurons",
+        "corticospinal neurons",
+        "D1 neurons",
+        "D2 neurons",
+        "DA neurons",
+        "dopamine neurons",
+        "dopaminergic neurons",
+        "efferent neurons",
+        "excitatory neurons",
+        "gabaergic neurons",
+        "ganglion cells",
+        "glutamatergic neurons",
+        "GnRH neurons",
+        "hippocampal neurons",
+        "horizontal cells",
+        "inhibitory neurons",
+        "interneurons",
+        "medium spiny neurons",
+        "mesencephalic neurons",
+        "monoaminergic neurons",
+        "motor neurons",
+        "neuronal cells",
+        "neurons",
+        "nitrergic neurons",
+        "noradrenergic neurons",
+        "orexin neurons",
+        "projection neurons",
+        "pyramidal neurons",
+        "RGC",
+        "sensory neurons",
+        "serotonergic neurons",
+        "serotonin neurons",
+        "somatostatin neurons",
+        "striatal neurons"
+      ]
+    },
+    {
+      "category": "cell",
+      "id": "cell/oligodendrocyte",
+      "name": "oligodendrocyte",
+      "terms": [
+        "oligodendrocytes"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/alcohol",
+      "name": "alcohol",
+      "terms": [
+        "acamprosate",
+        "alcohol",
+        "alcoholics",
+        "alcoholism",
+        "antabuse",
+        "campral",
+        "disulfiram",
+        "ethanol",
+        "naltrexone",
+        "revia",
+        "vivitrol"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/amphetamine",
+      "name": "amphetamine",
+      "terms": [
+        "AMPH",
+        "amphetamine",
+        "METH",
+        "methamphetamine"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/benzodiazepine",
+      "name": "benzodiazepine",
+      "terms": [
+        "adinazolam",
+        "alprazolam",
+        "benzodiazepine",
+        "benzos",
+        "brotizolam",
+        "chlordiazepoxide",
+        "climazolam",
+        "clobazam",
+        "clonazepam",
+        "clorazepate",
+        "diazepam",
+        "estazolam",
+        "flunitrazepam",
+        "flurazepam",
+        "halazepam",
+        "librium",
+        "loprazolam",
+        "lorazepam",
+        "lormetazepam",
+        "midazolam",
+        "nimetazepam",
+        "nitrazepam",
+        "normison",
+        "oxazepam",
+        "prazepam",
+        "temazepam",
+        "triazolam",
+        "valium",
+        "xanax"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/cannabinoid",
+      "name": "cannabinoid",
+      "terms": [
+        "acylethanolamines",
+        "cannabichromene",
+        "cannabidiol",
+        "cannabigerol",
+        "cannabinoids",
+        "cannabinol",
+        "cannabis",
+        "cannabivarin",
+        "cesamet",
+        "drobinal",
+        "dronabinol",
+        "endocannabinoids",
+        "epidiolex",
+        "JWH 018",
+        "JWH 122",
+        "JWH 250",
+        "marijuana",
+        "marinol",
+        "nabilone",
+        "Oleoylethanolamide",
+        "palmitoylethanolamide",
+        "phytocannabinoid",
+        "rimonabant",
+        "SR141716",
+        "SR144528",
+        "syndros",
+        "tetrahydrocannabinol",
+        "tetrahydrocannabivarin",
+        "thc",
+        "thc 9"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/cocaine",
+      "name": "cocaine",
+      "terms": [
+        "cocaine"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/nicotine",
+      "name": "nicotine",
+      "terms": [
+        "nicotine",
+        "smokers",
+        "smoking",
+        "tobacco"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/opioid",
+      "name": "opioid",
+      "terms": [
+        "buprenorphine",
+        "codeine",
+        "fentanyl",
+        "heroin",
+        "hycodan",
+        "hydrocodone",
+        "hydromorphone",
+        "kadian",
+        "kratom",
+        "methadone",
+        "morphine",
+        "naloxone",
+        "opioids",
+        "oxycodone",
+        "oxycontin",
+        "percocet",
+        "suboxone",
+        "tramadol",
+        "ultram",
+        "vicodin"
+      ]
+    },
+    {
+      "category": "drug",
+      "id": "drug/psychedelics",
+      "name": "psychedelics",
+      "terms": [
+        "ayahuasca",
+        "ecstasy",
+        "ibogaine",
+        "ketamine",
+        "LSD",
+        "lysergic acid diethylamide",
+        "MDMA",
+        "mescaline",
+        "methylenedioxymethamphetamine",
+        "N methoxybenzyl",
+        "NBOMes",
+        "peyote",
+        "psilocybin",
+        "psychedelic",
+        "psychedelics"
+      ]
+    },
+    {
+      "category": "function",
+      "id": "function/neuroplasticity",
+      "name": "neuroplasticity",
+      "terms": [
+        "boutons",
+        "epsc",
+        "epsp",
+        "IPSC",
+        "IPSP",
+        "long term depression",
+        "long term potentiation",
+        "LTD",
+        "LTP",
+        "mIPSC",
+        "neurite",
+        "neurogenesis",
+        "neuroplasticity",
+        "plasticity",
+        "synaptic"
+      ]
+    },
+    {
+      "category": "function",
+      "id": "function/neurotransmission",
+      "name": "neurotransmission",
+      "terms": [
+        "5 ht",
+        "acetylcholine",
+        "cholinergic",
+        "DAergic",
+        "dopamine",
+        "dopaminergic",
+        "GABA",
+        "GABAergic",
+        "glutamate",
+        "glutamatergic",
+        "muscarinic",
+        "neuropeptides",
+        "neurotransmission",
+        "nicotinic",
+        "serotonergic",
+        "serotonin"
+      ]
+    },
+    {
+      "category": "function",
+      "id": "function/signalling",
+      "name": "signalling",
+      "terms": [
+        "binding",
+        "cAMP",
+        "cGMP",
+        "glycosylation",
+        "kinase",
+        "phosphorylation",
+        "second messengers",
+        "signal transduction",
+        "signaling",
+        "signalling"
+      ]
+    },
+    {
+      "category": "function",
+      "id": "function/transcription",
+      "name": "transcription",
+      "terms": [
+        "histone",
+        "hypermethylation",
+        "hypomethylation",
+        "methylation",
+        "ribosome",
+        "transcription"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/anxiety",
+      "name": "anxiety",
+      "terms": [
+        "anxiety",
+        "anxious"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/autism",
+      "name": "autism",
+      "terms": [
+        "autism",
+        "autistic"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/bipolar",
+      "name": "bipolar",
+      "terms": [
+        "bipolar disorder"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/compulsive",
+      "name": "compulsive",
+      "terms": [
+        "compulsive",
+        "obsessive"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/depression",
+      "name": "depression",
+      "terms": [
+        "depression",
+        "depressive",
+        "major depressive disorder",
+        "MDD"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/impulsivity",
+      "name": "impulsivity",
+      "terms": [
+        "5 choice task",
+        "5 CSRTT",
+        "delay discounting",
+        "delay exposure",
+        "delay intolerance",
+        "delay task",
+        "delayed reward",
+        "five choice serial reaction time task",
+        "impulsive",
+        "impulsivity",
+        "premature responding"
+      ]
+    },
+    {
+      "category": "psychiatric",
+      "id": "psychiatric/schizophrenia",
+      "name": "schizophrenia",
+      "terms": [
+        "schizophrenia"
+      ]
+    },
+    {
+      "category": "stress",
+      "id": "stress/PTSD",
+      "name": "PTSD",
+      "terms": [
+        "post traumatic stress",
+        "post traumatic stress disorder",
+        "post traumatic stress symptoms",
+        "PTSD"
+      ]
+    },
+    {
+      "category": "stress",
+      "id": "stress/stress",
+      "name": "stress",
+      "terms": [
+        "distress",
+        "psychological trauma",
+        "stress"
+      ]
+    }
+  ],
+  "schema_version": 1
+}

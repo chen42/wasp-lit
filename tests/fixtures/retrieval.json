@@ -1,0 +1,18 @@
+{
+  "synthetic": true,
+  "notice": "All identifiers and abstracts in this file are artificial test fixtures. They are not PubMed records and must never be cited as literature evidence.",
+  "searches": {
+    "(\"WASP_TEST_GENE\"[tiab] OR \"PTG\"[tiab]) AND (\"stress\"[tiab])": ["900000007", "900000006", "900000005", "900000004", "900000003", "900000002", "900000001"]
+  },
+  "publication_date_order": ["900000007", "900000006", "900000005", "900000004", "900000003", "900000002", "900000001"],
+  "records": [
+    {"pmid": "900000007", "title": "Synthetic missing-abstract fixture", "abstract": null, "publication_types": [], "is_preprint": false},
+    {"pmid": "900000006", "title": "Synthetic primary experiment, not a publication", "abstract": "We tested WASP_TEST_GENE knockdown in rats. Knockdown reduced stress-induced operant responding. This artificial abstract is a software test fixture, not a report of an actual experiment.", "publication_types": ["Journal Article"], "is_preprint": false},
+    {"pmid": "900000005", "title": "Synthetic null result, not a publication", "abstract": "We tested WASP_TEST_GENE knockdown in rats. Knockdown had no effect on stress-induced operant responding. This artificial abstract is a software test fixture, not a report of an actual experiment.", "publication_types": ["Preprint"], "is_preprint": true},
+    {"pmid": "900000004", "title": "Synthetic ambiguous alias, not a publication", "abstract": "We measured PTG after stress. The meaning of PTG, the study organism and the experimental system were not specified. This artificial abstract is a software test fixture, not a publication.", "publication_types": [], "is_preprint": false},
+    {"pmid": "900000003", "title": "Synthetic incidental mention, not a publication", "abstract": "We measured stress-induced operant responding in rats without studying WASP_TEST_GENE. WASP_TEST_GENE was mentioned only as a possible target for a future experiment. This artificial abstract is a software test fixture, not a publication.", "publication_types": [], "is_preprint": false},
+    {"pmid": "900000002", "title": "Synthetic cellular experiment, not a publication", "abstract": "WASP_TEST_GENE knockdown reduced oxidative stress in cultured cells. Operant behavior was not examined. This artificial abstract is a software test fixture, not a report of an actual experiment.", "publication_types": ["Journal Article"], "is_preprint": false},
+    {"pmid": "900000001", "title": "Synthetic review, not a publication", "abstract": "This review discusses reports about WASP_TEST_GENE and stress-induced operant responding in rats. It presents no new experiments. This artificial abstract is a software test fixture, not a publication.", "publication_types": ["Review"], "is_preprint": false}
+  ],
+  "fulltexts": {}
+}

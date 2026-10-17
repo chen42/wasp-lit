@@ -71,18 +71,23 @@ Synthesis follows `weaver-text` citation and source-capture guidance.
 
 ## Installation
 
-Clone the repository, unchanged, into Pi's skills directory, then `/reload` and `/skill:wasp-lit`:
+Clone the repository, unchanged, into Pi's skills directory:
 
 ```bash
-git clone https://github.com/chen42/wasp-lit.git ~/.agents/skills/wasp-lit
+# Pi
+git clone https://github.com/chen42/wasp-lit.git ~/.pi/agent/skills/wasp-lit
 ```
 
-Live retrieval requires the installed `pubmed-database` skill, NCBI credentials, and `uv`; screening requires `pi-subagents`. Offline commands need only the Python standard library. Verify the installation:
+In Pi, run `/reload` after cloning, or list the path under `"skills"` in `~/.pi/agent/settings.json`.
+
+Requirements: Live retrieval requires the installed `pubmed-database` skill, NCBI credentials, and `uv`; screening requires the Pi `pi-subagents` skill. Offline commands need only the Python standard library.
+
+Verify the installation from the skill directory:
 
 ```bash
-SKILL="$HOME/.agents/skills/wasp-lit"
-python3 "$SKILL/scripts/wasp.py" doctor
-python3 -m unittest discover -s "$SKILL/tests" -v
+cd ~/.pi/agent/skills/wasp-lit  # or your install path
+python3 scripts/wasp.py doctor
+python3 -m unittest discover -s tests -v
 ```
 
 Full commands are in the [runbook](references/runbook.md).

@@ -2,12 +2,12 @@
 
 ## Load and verify
 
-The skill lives at `~/.agents/skills/wasp-lit/`, with `SKILL.md` at the directory root. Use `/reload`, then `/skill:wasp-lit`. Do not rename the directory or reinstall `pi-subagents` as part of an ordinary run.
+Use `/reload`, then `/skill:wasp-lit`. Do not rename the directory or reinstall `pi-subagents` as part of an ordinary run.
 
-For shell commands, resolve the actual installed directory once:
+For shell commands, set `SKILL` once to the directory that contains this skill's `SKILL.md`:
 
 ```bash
-SKILL="$HOME/.agents/skills/wasp-lit"
+SKILL="/path/to/wasp-lit"
 python3 "$SKILL/scripts/wasp.py" doctor
 python3 -m unittest discover -s "$SKILL/tests" -v
 ```

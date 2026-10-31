@@ -1853,6 +1853,11 @@ class Store:
         ])
         path.write_text(content, encoding="utf-8")
 
+    def render_html(self):
+        """Render workspace Markdown documents (synthesis, gene-function, decisions, etc.) to interactive HTML."""
+        from render_html import render_workspace_html
+        return render_workspace_html(self.root)
+
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
         articles, evidence, triage = self.table("articles"), self.table("evidence"), self.table("triage")

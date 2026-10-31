@@ -1293,6 +1293,33 @@ class Store:
                 errors.append(str(error))
         return errors
 
+    def audit_markdown(self):
+        """Check workspace Markdown files for non-portable file:// URIs, .md TLD linkify traps, and inline-code concept IDs."""
+        errors = []
+        sources_dir = self.base / "sources"
+        for md_path in sorted(self.root.rglob("*.md")):
+            if sources_dir in md_path.parents:
+                continue
+            try:
+                text = md_path.read_text(encoding="utf-8")
+            except OSError as error:
+                errors.append(str(error))
+                continue
+            rel = self.rel(md_path)
+            no_fences = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+            if "synthesis" in md_path.name.lower():
+                if re.search(r"`(?:addiction|brain|cell|drug|function|psychiatric|signalling|phenotype)/[A-Za-z0-9_-]+`", no_fences):
+                    errors.append("Synthesis Markdown wraps ontology concept IDs in backticks; use natural prose: " + rel)
+            no_code = re.sub(r"`[^`\n]+`", "", no_fences)
+            if "file://" in no_code:
+                errors.append("Markdown file contains non-portable file:// URI (use relative ./ or ../ paths): " + rel)
+            if re.search(r"\[[^\]]*?\b[\w.-]+\.md\]\(", no_code):
+                errors.append("Markdown link label contains a .md filename (use descriptive label to prevent .md TLD auto-linking): " + rel)
+            without_links = re.sub(r"\[[^\]]+\]\([^)]+\)", "", no_code)
+            if re.search(r"(?<![/\w.-])[\w-]+\.md\b", without_links):
+                errors.append("Markdown prose contains bare unlinked .md filename (wrap in a relative link with descriptive label): " + rel)
+        return errors
+
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
         articles, evidence = self.table("articles"), self.table("evidence")
@@ -1443,5 +1470,6 @@ class Store:
                     errors.append("Search coverage/count mismatch: " + qid)
         errors.extend(self.audit_associations())
         errors.extend(self.audit_triage())
+        errors.extend(self.audit_markdown())
         return {"ok": not errors, "errors": errors, "overview": self.overview(),
                 "not_verified": ["scientific support for interpretations", "publication notices", "live query reproducibility"]}

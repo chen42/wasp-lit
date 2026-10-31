@@ -5,7 +5,7 @@ Workspace/run: [workspace and run ID]
 
 ## Gene function and concept domains
 
-[Briefly summarize gene function with links to function-only NCBI Gene and WikiGenes records. Name the gene-function-prioritized concept domains that received 200 abstracts, the other ontology concepts searched with 30 abstracts each, and the direct phenotype query cap. State the GWAS Catalog association result for each eligible human gene-trait pair, including effect alleles, studies and PMIDs, or the specific blocker.]
+[Briefly summarize gene function with relative links to function-only NCBI Gene and WikiGenes records, for example `[NCBI Gene summary](../gene-function/GENE-ncbi-gene.json)` and `[WikiGenes extract](../gene-function/GENE-wikigenes.json)`. Never use `file://` URIs or `.md` filenames as link labels, and do not wrap gene symbols, protein names, or concept domains in backticks in narrative prose. Name the gene-function-prioritized concept domains that received 200 abstracts in natural language, the other ontology concepts searched with 30 abstracts each, and the direct phenotype query cap. State the GWAS Catalog association result for each eligible human gene-trait pair, including effect alleles, studies and PMIDs, or the specific blocker.]
 
 ## Anatomical expression
 
@@ -29,4 +29,4 @@ Workspace/run: [workspace and run ID]
 
 ## Sources reopened
 
-[PMIDs, record hashes, source snapshots, evidence IDs, and abstract or full-text level. Include links to the saved NCBI Gene and WikiGenes function-only records.]
+[PMIDs, record hashes, relative source snapshot links, evidence IDs, and abstract or full-text level. Include relative `./` or `../` links to the saved NCBI Gene and WikiGenes function-only records, with descriptive link labels rather than bare `.md` filenames.]

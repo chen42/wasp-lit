@@ -2,7 +2,7 @@
 
 Phenotype: [target phenotype]
 Date: [date]
-Function context: [relative links under `references/gene-function/`]
+Function context: [relative `./` or `../` links under `references/gene-function/` using descriptive link labels; never use `file://` URIs or `.md` filenames in link labels]
 
 ## [Gene symbol] ([reference organism])
 

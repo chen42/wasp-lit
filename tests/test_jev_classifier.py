@@ -260,6 +260,29 @@ class CrossHarnessStoreAndCliTests(unittest.TestCase):
             self.assertTrue(data["agent_exists"])
             self.assertTrue(data["agent_matches_canonical"])
 
+    def test_audit_markdown_rejects_file_uris_md_tld_traps_and_backtick_concepts(self):
+        notes_dir = Path(self.temp.name) / "references" / "notes"
+        notes_dir.mkdir(parents=True, exist_ok=True)
+        synthesis_path = notes_dir / "synthesis.md"
+        synthesis_path.write_text(
+            "# Synthesis\n\n"
+            "See [NCBI Gene summary](../gene-function/GENE-ncbi.json) and "
+            "[selected concept domains](../selected-concept-domains.md) for CACNA1C "
+            "in the nicotine and reward domains.\n",
+            encoding="utf-8",
+        )
+        self.assertTrue(self.store.audit()["ok"], self.store.audit()["errors"])
+
+        synthesis_path.write_text(
+            "# Synthesis\n\n"
+            "Bad [selected-concept-domains.md](file:///home/user/selected-concept-domains.md) "
+            "and bare notes.md with `drug/nicotine` in prose.\n",
+            encoding="utf-8",
+        )
+        audit_result = self.store.audit()
+        self.assertFalse(audit_result["ok"])
+        self.assertEqual(len(audit_result["errors"]), 4)
+
 
 if __name__ == "__main__":
     unittest.main()

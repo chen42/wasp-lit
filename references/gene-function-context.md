@@ -19,11 +19,12 @@ python3 "$SKILL/scripts/wikigenes.py" CACNA1C \
   --output "$PROJECT/references/gene-function/CACNA1C-wikigenes.json"
 ```
 
-For NCBI Gene ID resolution, use the `search` command documented by `ncbi-sequence-fetch`, for example:
+For NCBI Gene ID resolution, use the `search` command documented by `ncbi-sequence-fetch`, resolving sibling skills relative to `$SKILL/..` (or `~/.agents/skills`), for example:
 
 ```bash
-NCBI="$HOME/.agents/skills/ncbi_sequence_fetch/scripts/ncbi_fetch.py"
-PUBMED="$HOME/.agents/skills/pubmed_database/scripts/pubmed_api.py"
+SKILLS_DIR="$(cd "$SKILL/.." && pwd)"
+NCBI="$SKILLS_DIR/ncbi_sequence_fetch/scripts/ncbi_fetch.py"
+PUBMED="$SKILLS_DIR/pubmed_database/scripts/pubmed_api.py"
 uv run "$NCBI" search '"CACNA1C"[Gene Name] AND "Homo sapiens"[Organism]' \
   --database gene --retmax 20 --output "$TMP/ncbi-gene-search.json"
 uv run "$PUBMED" "$TMP/ncbi-gene-summary.json" \

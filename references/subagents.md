@@ -2,9 +2,9 @@
 
 ## Roles and authority
 
-Use the maintained installed `pi-subagents` package, not version-specific links to Pi's example extension. The coordinator is the host parent. Workers are `concept-screener` agents with only `read`, `grep`, `find` and `ls`; no retrieval, edits, shell, synthesis or child spawning. Model policy belongs in user/project settings, not this skill.
+The coordinator is the host parent. Workers are `concept-screener` agents with only read-only file inspection tools (`read`, `grep`, `find` and `ls` in Pi, or the host harness's equivalent read-only toolset); no retrieval, edits, shell, synthesis or child spawning. Model policy belongs in user/project settings, not this skill.
 
-Read the installed `pi-subagents` skill and its execution/validation references before launching. Use `subagent({action:"list",capabilities:true})` to check the effective agent and tool boundary. Discovery alone does not prove a successful model launch.
+In Pi, use the maintained installed `pi-subagents` package, not version-specific links to Pi's example extension; read the installed `pi-subagents` skill and its execution/validation references before launching, and use `subagent({action:"list",capabilities:true})` to check the effective agent and tool boundary. On other harnesses (such as Antigravity, Claude Code, Codex, or OpenCode), define or invoke a read-only subagent using the canonical rubric in `agents/concept-screener.md` and dispatch tasks from `jobs-index.json` or the generated `.json` wave plans. Discovery alone does not prove a successful model launch.
 
 ## Model pinning and verification
 
@@ -43,11 +43,13 @@ Keep `agents/concept-screener.md` canonical. The runbook gives a user-agent upda
 
 ## Jobs and waves
 
-`scripts/wasp.py jobs` creates complete JSONL packets and immutable job manifests, one gene and one concept per job. Default packet size is at most 20 abstracts and 40,000 UTF-8 bytes. No lexical prefilter automatically excludes records. An oversized record needs a separate source-aware read.
+`scripts/wasp.py jobs` creates complete JSONL packets and immutable job manifests, one gene and one concept per job. Default packet size is at most 20 abstracts and 40,000 UTF-8 bytes. No lexical prefilter or triage classifier automatically excludes records. If `wasp.py triage` was run beforehand, `jobs` orders triage-included records into earlier packets so high-probability evidence is screened first while retaining every record. An oversized record needs a separate source-aware read.
 
-The command writes ordinary JavaScript workflow scripts with explicit child `output` bindings and `outputMode:"file-only"`. It does not invoke Pi or launch models. Default wave size is 64 jobs; the CLI permits at most 128. Each wave dispatches awaited groups of at most 6 workers by default, stopping further dispatch after a failed group. `--dispatch-size` changes group size separately from packet size and wave fan-out. Inspect configured group, cumulative run fan-out and session limits before launch; lower these sizes when necessary. Context batching is separate from scientific retrieval caps.
+The command writes both Pi JavaScript workflow scripts (`.js`, with explicit child `output` bindings and `outputMode:"file-only"`) and portable JSON wave plans (`.json`, listed under `wave_json_paths` in `jobs-index.json`). It does not invoke Pi or launch models. Default wave size is 64 jobs; the CLI permits at most 128. Each wave dispatches awaited groups of at most 6 workers by default, stopping further dispatch after a failed group. `--dispatch-size` changes group size separately from packet size and wave fan-out. Inspect configured group, cumulative run fan-out and session limits before launch; lower these sizes when necessary. Context batching is separate from scientific retrieval caps.
 
-For an authorized screening wave, use one top-level workflow call:
+### Execution in Pi
+
+For an authorized screening wave in Pi, use one top-level workflow call:
 
 ```javascript
 subagent({
@@ -63,10 +65,30 @@ The workflow awaits each `runs.all` group, leaves child `async` unset so its res
 
 Consume completed wave results before importing or synthesizing. Read the actual returned artifact path, not a guessed path from the task text. Validate each response with its job manifest, then import using the actual child runtime run ID. Runtime output persistence does not give a read-only worker corpus-write permission.
 
+### Execution on other harnesses
+
+On harnesses without `pi-subagents` (such as Antigravity, Claude Code, Codex, or OpenCode):
+
+1. Read `references/wasp/jobs-index.json` or the portable wave file in `wave_json_paths`. Each entry in `jobs` provides `job_id`, `path` (the canonical `job.json`), `packet_path`, `expected_output_path`, `rubric_path`, and the exact `task` prompt.
+2. Dispatch fresh-context, read-only subagents in bounded groups (up to `dispatch_size`, 6 by default) using the host harness's native subagent tool and the system prompt in `agents/concept-screener.md`.
+3. When a subagent completes and returns its JSONL assessment lines, persist, validate, and import the output with `evidence-record`:
+
+```bash
+python3 "$SKILL/scripts/wasp.py" evidence-record "$PROJECT" \
+  --job "/actual/job.json" --response "/path/to/worker-output.jsonl" \
+  --runtime-run-id "actual-child-run-id"
+```
+
+Or pipe the worker's raw JSONL text on standard input with `--stdin`.
+
+## Optional Jev triage pre-prioritization
+
+`scripts/jev_classifier.py` and `wasp.py triage` provide a pure-Python structured classification step for `typesafe/jev-latest` (or saved classification captures) that does not depend on Pi's `codemode` `models.classify` binding. Under the default `never-hard-exclude` policy, classifier exclusions are rerouted to `needs_review` and never dropped from `jobs`. Because a typed classifier does not extract free-form findings or verbatim quotations, `concept-screener` validation remains required for every included record.
+
 ## Resume and failure
 
 Accepted include/exclude assessments for the same gene, concept, record hash and rubric are reused. `needs_review` remains unresolved and can be reassigned. If a workflow exceeds its budget, regenerate only pending jobs and use a new authorized wave; do not raise limits silently.
 
 Ordinary async completion wakes the parent. Continue independent parent work or yield; do not sleep/poll or call `bg_wait` merely to wait. Retain wave and child IDs for troubleshooting.
 
-On launch, workflow, provider or child-tooling failure, stop the affected lane. Report the exact error, runtime ID, cwd and repository/ref state. Do not silently switch models or fall back to an external CLI/foreground protocol. Keep the corpus and pending jobs intact. Use only an explicit same-protocol retry or ask the user about a change in execution mode.
+On launch, workflow, provider or child-tooling failure within the active harness protocol, stop the affected lane. Report the exact error, runtime ID, cwd and repository/ref state. Do not silently switch models or bypass validation checks. Keep the corpus and pending jobs intact. Use only an explicit same-protocol retry or ask the user about a change in execution mode.

@@ -29,7 +29,7 @@ python3 "$SKILL/scripts/wasp.py" associations "$PROJECT" --run-id gwas-smk --phe
 
 Each response is saved verbatim as an immutable source with its request, timestamp and checksum before any row is trusted. `audit` re-reads every capture and compares each recorded association against it, so a tampered effect size or count is detectable.
 
-`--endpoint` overrides the `mcp.json` URL, and `WASP_GWAS_MCP_URL` overrides both. Resolution order is explicit flag, environment variable, project `.pi/mcp.json`, then `~/.pi/agent/mcp.json`.
+`--endpoint` overrides the configured MCP URL, and `WASP_GWAS_MCP_URL` overrides MCP configuration files. Resolution checks `--endpoint`, `WASP_GWAS_MCP_URL`, project MCP configs (`.pi/mcp.json`, `.mcp.json`, `.cursor/mcp.json`, `.gemini/mcp_config.json`, `.vscode/mcp.json`), and user MCP configs (`~/.pi/agent/mcp.json`, `~/.gemini/antigravity/mcp_config.json`, `~/.claude.json`, `~/.claude/mcp.json`, `~/.cursor/mcp.json`). When invoked from the CLI without `--strict-mcp-config`, the client falls back to the public EBI endpoint `https://www.ebi.ac.uk/gwas/mcp` if no local MCP config file is present.
 
 Offline callers can supply previously saved responses instead of a live call:
 

@@ -22,7 +22,7 @@ Fetch selected records in batches. Preserve raw XML and the complete parsed abst
 
 Generate bounded packets, with one gene and one concept per job. Every available selected abstract is assigned; missing abstracts remain explicitly unscreened. Packet boundaries limit context size without truncating sources. Generated workflow waves contain at most 64 jobs by default, dispatched in awaited groups of 6. These limits are independent of API request and abstract-packet batching.
 
-The host parent explicitly launches the workflow through `pi-subagents`. Workers read sources, return JSONL assessments, and never edit the corpus. Import only outputs that pass source-version, PMID-completeness, summary and quotation checks. Review scientific interpretation separately; deterministic validation cannot establish that a quotation supports a finding.
+The host parent explicitly launches the screening wave through `pi-subagents` in Pi or through the host harness's native subagent tool using `jobs-index.json` and the generated `.json` wave plans. Workers read sources, return JSONL assessments, and never edit the corpus. Import only outputs that pass source-version, PMID-completeness, summary and quotation checks. Review scientific interpretation separately; deterministic validation cannot establish that a quotation supports a finding.
 
 ## Retrieve full text and synthesize
 

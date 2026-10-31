@@ -46,7 +46,7 @@ wasp-lit/
 ├── agents/               # concept-screener subagent definition
 ├── references/           # Workflow, search, screening, full-text, corpus, and runbook guides
 ├── resources/            # Curated addiction keyword ontology (current and legacy)
-├── scripts/              # wasp.py CLI, core library, PubMed, WikiGenes, GWAS Catalog helpers
+├── scripts/              # wasp.py CLI, core library, PubMed, WikiGenes, GWAS Catalog, and Jev triage helpers
 ├── templates/            # Context example, search record, concept domains, synthesis
 ├── synthesis_prompt.txt  # Candidate-gene synthesis prompt
 ├── addiction_ontology.json # Original GeneCup ontology (unchanged; checked by tests)
@@ -71,21 +71,27 @@ Synthesis follows `weaver-text` citation and source-capture guidance.
 
 ## Installation
 
-Clone the repository, unchanged, into Pi's skills directory:
+Clone the repository, unchanged, into a skills directory your agent harness scans:
 
 ```bash
+# Shared cross-harness skills directory (Antigravity, Codex, OpenCode)
+git clone https://github.com/chen42/wasp-lit.git ~/.agents/skills/wasp-lit
+
 # Pi
 git clone https://github.com/chen42/wasp-lit.git ~/.pi/agent/skills/wasp-lit
+
+# Claude Code
+git clone https://github.com/chen42/wasp-lit.git ~/.claude/skills/wasp-lit
 ```
 
 In Pi, run `/reload` after cloning, or list the path under `"skills"` in `~/.pi/agent/settings.json`.
 
-Requirements: Live retrieval requires the installed `pubmed-database` skill, NCBI credentials, and `uv`; screening requires the Pi `pi-subagents` skill. Offline commands need only the Python standard library.
+Requirements: Live retrieval requires the installed `pubmed-database` skill, NCBI credentials, and `uv`; screening uses `pi-subagents` in Pi or the host harness's native subagent tool (`jobs-index.json` and `evidence-record`). Optional Jev triage (`wasp.py triage`) runs directly in Python over HTTP or from saved captures. Offline commands need only the Python standard library.
 
 Verify the installation from the skill directory:
 
 ```bash
-cd ~/.pi/agent/skills/wasp-lit  # or your install path
+cd ~/.agents/skills/wasp-lit  # or your install path
 python3 scripts/wasp.py doctor
 python3 -m unittest discover -s tests -v
 ```

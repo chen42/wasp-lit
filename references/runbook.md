@@ -2,7 +2,7 @@
 
 ## Load and verify
 
-Use `/reload`, then `/skill:wasp-lit`. Do not rename the directory or reinstall `pi-subagents` as part of an ordinary run.
+In Pi, use `/reload`, then `/skill:wasp-lit`. Do not rename the directory or reinstall `pi-subagents` as part of an ordinary run. On other harnesses, load the skill from your configured skills directory (`~/.agents/skills/wasp-lit`, `~/.claude/skills/wasp-lit`, or equivalent).
 
 For shell commands, set `SKILL` once to the directory that contains this skill's `SKILL.md`:
 
@@ -12,16 +12,16 @@ python3 "$SKILL/scripts/wasp.py" doctor
 python3 -m unittest discover -s "$SKILL/tests" -v
 ```
 
-Doctor checks paths and whether the installed agent matches the canonical rubric; it does not launch a model or make network requests. Check effective runtime capabilities with `subagent({action:"list",capabilities:true})` and `/subagents-doctor`.
+Doctor checks paths and whether the active agent rubric matches the canonical `agents/concept-screener.md` (`pi_installed` when `~/.pi/agent/agents/concept-screener.md` exists, or `canonical_bundle` on other harnesses); it does not launch a model or make network requests. In Pi, check effective runtime capabilities with `subagent({action:"list",capabilities:true})` and `/subagents-doctor`.
 
-The updated canonical screener includes direction targets and explicit finding fields. To refresh an existing user-agent copy, run locally:
+The updated canonical screener includes direction targets and explicit finding fields. To refresh an existing Pi user-agent copy, run locally:
 
 ```bash
 mkdir -p "$HOME/.pi/agent/agents"
 cp "$SKILL/agents/concept-screener.md" "$HOME/.pi/agent/agents/concept-screener.md"
 ```
 
-Then `/reload`. Do not overwrite unrelated Pi settings or pin the model through this skill. An existing installed DeepSeek Flash configuration can remain unchanged.
+Then `/reload` in Pi. Do not overwrite unrelated Pi settings or pin the model through this skill. An existing installed DeepSeek Flash configuration can remain unchanged.
 
 ## Initialize approved scope
 
@@ -56,11 +56,20 @@ The coordinator dynamically imports the installed PubMed wrapper, so `uv` does n
 
 ## Screening
 
+Optional Jev triage can be run before generating packets to prioritize high-probability inclusions into earlier waves under the default `never-hard-exclude` policy:
+
+```bash
+python3 "$SKILL/scripts/wasp.py" triage "$PROJECT" --run-id "$RUN"
+python3 "$SKILL/scripts/wasp.py" triage-report "$PROJECT" --run-id "$RUN"
+```
+
+Generate screening packets and wave manifests:
+
 ```bash
 python3 "$SKILL/scripts/wasp.py" jobs "$PROJECT" --run-id "$RUN"
 ```
 
-Read `jobs-index.json`. The command creates packets and workflow scripts but launches no subagents. Follow `references/subagents.md` to execute an authorized wave asynchronously through the native `subagent` tool. Use runtime-provided output references and actual child run IDs.
+Read `jobs-index.json`. The command creates packets, portable JSON wave plans (`wave_json_paths`), and Pi workflow scripts (`wave_paths`), but launches no subagents. Follow `references/subagents.md` to execute an authorized wave asynchronously through Pi's `subagent` tool or your host harness's native subagent tool. Use runtime-provided output references and actual child run IDs.
 
 Pass `--model` to declare an explicit model for every screening worker in the generated waves:
 
@@ -70,7 +79,7 @@ python3 "$SKILL/scripts/wasp.py" jobs "$PROJECT" --run-id "$RUN" --model "provid
 
 Without `--model` the workers use the configured subagent default. With it, each generated task carries that model, the subagents model-verification guard compares the child's observed model against it, and `jobs-index.json` records the value. Use it when a router or a session default would otherwise override the worker model, and record the resulting model change in the workspace. A failed worker is unresolved work; regenerate pending jobs and run a new authorized wave rather than importing a rejected response.
 
-For each completed child:
+For each completed child when an output file path is already written:
 
 ```bash
 python3 "$SKILL/scripts/wasp.py" evidence-validate "$PROJECT" \
@@ -78,6 +87,15 @@ python3 "$SKILL/scripts/wasp.py" evidence-validate "$PROJECT" \
 python3 "$SKILL/scripts/wasp.py" evidence-import "$PROJECT" \
   --job "/actual/job.json" --response "/actual/runtime/output.jsonl" \
   --runtime-run-id "actual-child-run-id"
+```
+
+On harnesses where a read-only subagent returns JSONL lines in its response message instead of a runtime file binding, persist, validate, and import in one step with `evidence-record`:
+
+```bash
+python3 "$SKILL/scripts/wasp.py" evidence-record "$PROJECT" \
+  --job "/actual/job.json" --stdin --runtime-run-id "actual-child-run-id" <<'EOF'
+<worker JSONL output lines>
+EOF
 ```
 
 Review scientific judgments before synthesis. Regenerate jobs to continue pending assessments. Do not mistake `needs_review` or a missing abstract for exclusion.

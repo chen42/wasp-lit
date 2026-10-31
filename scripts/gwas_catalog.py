@@ -29,6 +29,7 @@ import urllib.request
 
 PHENOTYPE_ID = re.compile(r"^[A-Za-z][A-Za-z0-9]*_[0-9]+$")
 TOOLS = ("gwascatalog_get_traits", "gwascatalog_get_associations", "gwascatalog_get_studies")
+DEFAULT_GWAS_MCP_URL = "https://www.ebi.ac.uk/gwas/mcp"
 DEFAULT_TIMEOUT = 60
 DEFAULT_RETRIES = 2
 # The server rejects size above this with a validation error.
@@ -55,24 +56,50 @@ def valid_phenotype_id(value):
     return isinstance(value, str) and bool(PHENOTYPE_ID.fullmatch(value))
 
 
-def resolve_endpoint(project_root=None, explicit=None):
-    """Resolve the GWAS Catalog MCP URL from the environment or mcp.json."""
+def resolve_endpoint(project_root=None, explicit=None, default_fallback=False):
+    """Resolve the GWAS Catalog MCP URL from the environment, cross-harness MCP configs, or default."""
     if explicit:
         return explicit
     if os.environ.get("WASP_GWAS_MCP_URL"):
         return os.environ["WASP_GWAS_MCP_URL"]
     candidates = []
     if project_root is not None:
-        candidates.append(Path(project_root) / ".pi" / "mcp.json")
-    candidates.append(Path.home() / ".pi" / "agent" / "mcp.json")
+        root = Path(project_root)
+        candidates.extend([
+            root / ".pi" / "mcp.json",
+            root / ".mcp.json",
+            root / ".cursor" / "mcp.json",
+            root / ".gemini" / "mcp_config.json",
+            root / ".gemini" / "settings.json",
+            root / ".vscode" / "mcp.json",
+        ])
+    home = Path.home()
+    candidates.extend([
+        home / ".pi" / "agent" / "mcp.json",
+        home / ".gemini" / "antigravity" / "mcp_config.json",
+        home / ".gemini" / "settings.json",
+        home / ".claude.json",
+        home / ".claude" / "mcp.json",
+        home / ".config" / "claude" / "mcp.json",
+        home / ".cursor" / "mcp.json",
+    ])
     for path in candidates:
         try:
-            servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers") or {}
+            config = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        if not isinstance(config, dict):
+            continue
+        servers = config.get("mcpServers") or config.get("servers") or {}
+        if not isinstance(servers, dict):
+            continue
         for name, entry in servers.items():
-            if name.replace("-", "_") == "gwas_mcp" and isinstance(entry, dict) and entry.get("url"):
-                return entry["url"]
+            if name.replace("-", "_") == "gwas_mcp" and isinstance(entry, dict):
+                url = entry.get("url") or entry.get("httpUrl") or entry.get("serverUrl")
+                if url:
+                    return url
+    if default_fallback:
+        return DEFAULT_GWAS_MCP_URL
     raise CatalogError("No GWAS Catalog MCP server configured. Add a gwas-mcp entry with a url to "
                        "mcp.json, set WASP_GWAS_MCP_URL, or pass --endpoint")
 

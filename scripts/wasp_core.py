@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 
 from gwas_catalog import (CaptureError, assess_group, infer_tool, normalize_association,
                           page_info, unwrap, valid_phenotype_id)
+from jev_classifier import JevCaptureError, normalize_triage_row, unwrap_triage_capture
 
 VERSION = "0.4.0"
 UID_LIMIT = 9999
@@ -546,12 +547,24 @@ class Store:
         for e in assessments:
             latest[(e["gene"], e["concept_id"], e["pmid"], e["source_version"], e["rubric_sha256"])] = e
         settled = {key for key, evidence in latest.items() if evidence["decision"] in ("include", "exclude")}
+        triage_lookup = {}
+        for row in self.table("triage"):
+            triage_lookup[(row["gene"], row["concept_id"], row["pmid"], row["source_version"])] = row
         record_hashes = run.get("record_hashes", run.get("versions", {}))
         jobs = []
         for qid, search in run["searches"].items():
             packets = []
             packet, size = [], 0
-            for pmid in search["selected_pmids"]:
+            selected_pmids = list(search["selected_pmids"])
+            if triage_lookup:
+                def triage_rank(pmid):
+                    version = record_hashes.get(pmid)
+                    entry = triage_lookup.get((search["gene"], search["concept"]["id"], pmid, version))
+                    if entry is None:
+                        return 1
+                    return 0 if entry.get("effective_decision") == "include" else 1
+                selected_pmids.sort(key=triage_rank)
+            for pmid in selected_pmids:
                 record_hash = record_hashes.get(pmid)
                 if not record_hash or (search["gene"], search["concept"]["id"], pmid, record_hash, file_hash(rubric)) in settled:
                     continue
@@ -588,8 +601,10 @@ class Store:
                 job["packet_sha256"] = file_hash(packet_path)
                 immutable(folder / "job.json", job)
                 jobs.append(job)
-        # Persist scripts, not launches. The host parent explicitly invokes them.
+        # Persist scripts and portable JSON manifests, not launches. The host parent explicitly invokes them.
         wave_paths = []
+        wave_json_paths = []
+        job_tasks = {}
         for start in range(0, len(jobs), wave_size):
             steps = []
             for job in jobs[start:start + wave_size]:
@@ -605,6 +620,7 @@ class Store:
                         "packet defect: screen that record from the available text, leave fields the missing "
                         "text would establish as null or unclear, note the limitation in finding or reason, "
                         "and do not exclude for it alone.")
+                job_tasks[job["job_id"]] = task
                 step = {"key": job["job_id"], "label": "Screen " + job["gene"]["symbol"] + " " + job["concept"]["id"],
                         "agent": "concept-screener", "context": "fresh", "cwd": str(self.root),
                         "task": task, "output": "assessments/" + job["job_id"] + ".jsonl", "outputMode": "file-only"}
@@ -639,15 +655,33 @@ class Store:
                      "return results.map((r, i) => ({key: tasks[i].key, ok: r.ok, runId: r.runId, "
                      "outputReference: r.outputReference, outputPathMapping: r.outputPathMapping, "
                      "artifactPaths: r.artifactPaths, error: r.error}));\n")
-            path = self.base / "waves" / (run_id + "-" + digest(code)[:16] + ".js")
+            wave_stem = run_id + "-" + digest(code)[:16]
+            path = self.base / "waves" / (wave_stem + ".js")
             path.parent.mkdir(parents=True, exist_ok=True)
             if path.exists() and path.read_text(encoding="utf-8") != code:
                 raise WaspError("Workflow source collision")
             path.write_text(code, encoding="utf-8")
             wave_paths.append(str(path))
+            json_plan = {
+                "run_id": run_id,
+                "dispatch_size": dispatch_size,
+                "model": model,
+                "groups": [steps[offset:offset + dispatch_size] for offset in range(0, len(steps), dispatch_size)],
+            }
+            json_path = self.base / "waves" / (wave_stem + ".json")
+            atomic(json_path, json_plan)
+            wave_json_paths.append(str(json_path))
         output = {"run_id": run_id, "job_count": len(jobs), "dispatch_size": dispatch_size,
-                  "model": model, "wave_paths": wave_paths,
-                  "jobs": [{"job_id": j["job_id"], "path": str(self.base / "jobs" / j["job_id"] / "job.json")} for j in jobs]}
+                  "model": model, "wave_paths": wave_paths, "wave_json_paths": wave_json_paths,
+                  "jobs": [{"job_id": j["job_id"],
+                            "path": str(self.base / "jobs" / j["job_id"] / "job.json"),
+                            "gene": j["gene"]["symbol"],
+                            "concept_id": j["concept"]["id"],
+                            "assigned_count": len(j["assigned_pmids"]),
+                            "packet_path": str(self.path(j["packet_path"])),
+                            "expected_output_path": str(self.base / "assessments" / (j["job_id"] + ".jsonl")),
+                            "rubric_path": j["rubric_path"],
+                            "task": job_tasks[j["job_id"]]} for j in jobs]}
         atomic(self.base / "jobs-index.json", output)
         return output
 
@@ -750,6 +784,31 @@ class Store:
         self.overview()
         return {"imported": len(rows), "reused": False, "job_id": job["job_id"]}
 
+    def record_assessments(self, job_path, raw_text, runtime_run_id=None):
+        """Write worker JSONL output to the workspace assessment path, validate it, and optionally import."""
+        job = load(job_path)
+        if Path(job_path).resolve() != (self.base / "jobs" / job["job_id"] / "job.json").resolve():
+            raise WaspError("Use this workspace's canonical job manifest")
+        if not isinstance(raw_text, str) or not raw_text.strip():
+            raise WaspError("Worker assessment text is empty")
+        parsed_rows = []
+        for line in raw_text.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("```"):
+                continue
+            try:
+                parsed_rows.append(json.loads(stripped))
+            except json.JSONDecodeError as error:
+                raise WaspError("Invalid JSONL line in worker response: " + str(error)) from None
+        output_path = self.base / "assessments" / (job["job_id"] + ".jsonl")
+        atomic(output_path, parsed_rows, jsonl=True)
+        _, validated = self.validate_assessments(job_path, output_path)
+        result = {"valid": True, "job_id": job["job_id"], "records": len(validated),
+                  "output_path": str(output_path)}
+        if runtime_run_id:
+            result.update(self.import_evidence(job_path, output_path, runtime_run_id))
+        return result
+
     def fulltext(self, backend, run_id, max_attempts=None, pmids=None, target=None):
         checked_run_id(run_id)
         run = load(self.base / "runs" / (run_id + ".json"))
@@ -780,6 +839,10 @@ class Store:
         for evidence in self.table("evidence"):
             key = (evidence["gene"], evidence["concept_id"], evidence["pmid"], evidence["source_version"])
             latest[key] = evidence
+        context_data = load(self.base / "context.json")
+        prioritized_drugs = {cid for cid in context_data.get("concept_ids", [])
+                             if isinstance(cid, str) and cid.startswith("drug/")}
+        tier0_concepts = {"phenotype/direct", "drug/nicotine"} | prioritized_drugs
         priorities = {}
         for evidence in latest.values():
             pmid = evidence["pmid"]
@@ -787,7 +850,7 @@ class Store:
                     or evidence["phenotype_relevance"] not in ("direct", "indirect")
                     or pmid not in selected or evidence["source_version"] != record_hashes[pmid]):
                 continue
-            if evidence["concept_id"] in ("phenotype/direct", "drug/nicotine"):
+            if evidence["concept_id"] in tier0_concepts:
                 priority = 0
             elif evidence["phenotype_relevance"] == "direct":
                 priority = 1
@@ -1153,6 +1216,83 @@ class Store:
                 errors.append(str(error))
         return errors
 
+    def ingest_triage(self, captures, run_id, policy="never-hard-exclude"):
+        """Ingest Jev triage classifications for a retrieval run without excluding any record."""
+        checked_run_id(run_id)
+        run = load(self.base / "runs" / (run_id + ".json"))
+        record_hashes = run.get("record_hashes", run.get("versions", {}))
+        valid_pairs = {(s["gene"], s["concept"]["id"], pmid)
+                       for s in run["searches"].values() for pmid in s["selected_pmids"]}
+        normalized = []
+        seen = set()
+        for capture in captures:
+            try:
+                raw_rows = unwrap_triage_capture(capture["payload"])
+                rows = [normalize_triage_row(item, policy=policy) for item in raw_rows]
+            except JevCaptureError as error:
+                raise WaspError("Triage capture " + capture["name"] + ": " + str(error)) from None
+            ref = self.source(run_id, "jev_triage", capture["payload"],
+                              {"capture_file": capture["name"], "policy": policy})
+            for row in rows:
+                pair_key = (row["gene"], row["concept_id"], row["pmid"])
+                if pair_key not in valid_pairs:
+                    raise WaspError(f"Triage row {pair_key} is not in selected records for run {run_id}")
+                if record_hashes.get(row["pmid"]) != row["source_version"]:
+                    raise WaspError(f"Triage source_version mismatch for PMID {row['pmid']}")
+                if pair_key in seen:
+                    raise WaspError(f"Duplicate triage classification for {pair_key}")
+                seen.add(pair_key)
+                normalized.append({**row, "run_id": run_id, "source": ref, "recorded_at": now()})
+        existing = [r for r in self.table("triage") if r["run_id"] != run_id]
+        self.save_table("triage", existing + normalized)
+        counts = Counter(r["effective_decision"] for r in normalized)
+        raw_counts = Counter(r["raw_decision"] for r in normalized)
+        summary = {
+            "run_id": run_id,
+            "policy": policy,
+            "triaged_pairs": len(normalized),
+            "effective_decisions": dict(counts),
+            "raw_decisions": dict(raw_counts),
+            "rerouted_exclusions": sum(1 for r in normalized
+                                       if r["raw_decision"] == "exclude" and r["effective_decision"] == "needs_review"),
+            "updated_at": now(),
+        }
+        atomic(self.base / "triage-runs" / (run_id + ".json"), summary)
+        self.overview()
+        return summary
+
+    def triage_report(self, run_id=None):
+        rows = [r for r in self.table("triage") if run_id is None or r["run_id"] == run_id]
+        return {
+            "run_id": run_id,
+            "triaged_pairs": len(rows),
+            "effective_decisions": dict(Counter(r["effective_decision"] for r in rows)),
+            "raw_decisions": dict(Counter(r["raw_decision"] for r in rows)),
+            "records": rows,
+            "note": "Triage prioritizes abstract screening order; it does not replace verbatim quotation validation.",
+        }
+
+    def audit_triage(self):
+        errors = []
+        for row in self.table("triage"):
+            try:
+                ref = row["source"]
+                if file_hash(self.path(ref["path"])) != ref["sha256"]:
+                    errors.append("Jev triage capture checksum mismatch")
+                    continue
+                raw_rows = unwrap_triage_capture(load(self.path(ref["path"])))
+                matched = next((normalize_triage_row(item, policy=row["policy"]) for item in raw_rows
+                                if str(item.get("pmid")) == row["pmid"]
+                                and item.get("gene") == row["gene"]
+                                and item.get("concept_id") == row["concept_id"]), None)
+                if matched is None:
+                    errors.append("Triage row missing from its capture: " + row["pmid"])
+                elif any(row.get(k) != v for k, v in matched.items()):
+                    errors.append("Triage row differs from its capture: " + row["pmid"])
+            except (OSError, ValueError, KeyError, TypeError, JevCaptureError) as error:
+                errors.append(str(error))
+        return errors
+
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
         articles, evidence = self.table("articles"), self.table("evidence")
@@ -1302,5 +1442,6 @@ class Store:
                 if search["coverage"] == "complete_count_reconciled" and len(set(search["pmids"])) != search["count"]:
                     errors.append("Search coverage/count mismatch: " + qid)
         errors.extend(self.audit_associations())
+        errors.extend(self.audit_triage())
         return {"ok": not errors, "errors": errors, "overview": self.overview(),
                 "not_verified": ["scientific support for interpretations", "publication notices", "live query reproducibility"]}

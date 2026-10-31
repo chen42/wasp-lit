@@ -229,6 +229,13 @@ class ClientTests(unittest.TestCase):
             with unittest.mock.patch.dict(os.environ, {"HOME": home, "WASP_GWAS_MCP_URL": ""}):
                 with self.assertRaises(CatalogError):
                     resolve_endpoint(project_root="/nonexistent")
+                self.assertEqual(resolve_endpoint(project_root="/nonexistent", default_fallback=True),
+                                 "https://www.ebi.ac.uk/gwas/mcp")
+                antigravity = Path(home) / ".gemini" / "antigravity"
+                antigravity.mkdir(parents=True)
+                (antigravity / "mcp_config.json").write_text(json.dumps(
+                    {"mcpServers": {"gwas_mcp": {"serverUrl": "https://antigravity.invalid/mcp"}}}), encoding="utf-8")
+                self.assertEqual(resolve_endpoint(project_root="/nonexistent"), "https://antigravity.invalid/mcp")
         self.assertEqual(resolve_endpoint(explicit="https://explicit.invalid/mcp"),
                          "https://explicit.invalid/mcp")
 

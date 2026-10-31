@@ -47,13 +47,13 @@ Large searches require count-reconciled partitioning. Do not assume `retstart` c
 
 The host parent owns query planning, retrieval, deduplication, corpus writes, validation, synthesis and conversation continuity. Workers screen local sources only. Do not delegate retrieval or corpus writes.
 
-Read [screening and synthesis](references/evidence-and-synthesis.md), [subagent execution](references/subagents.md), and the installed `pi-subagents` skill before launching workers. This skill's screening stage authorizes concept-screening delegation when the user requests its literature workflow. It does not authorize unrelated coding or review delegation.
+Read [screening and synthesis](references/evidence-and-synthesis.md) and [subagent execution](references/subagents.md) before launching workers. In Pi, also read the installed `pi-subagents` skill; on other harnesses, use the host runtime's native subagent tool with the generated `jobs-index.json` or JSON wave plans. This skill's screening stage authorizes concept-screening delegation when the user requests its literature workflow. It does not authorize unrelated coding or review delegation.
 
 Use `concept-screener`, fresh context, one gene and one concept per bounded packet. Check effective agent capabilities before execution. Preserve its read-only tools; do not pin a model in this skill. Group small packets into bounded workflow waves, not one worker per PMID. Parent launch authority and runtime fan-out limits still apply.
 
-Read every assigned complete abstract. Lexical matching can annotate or prioritize records, but cannot silently exclude them from scientific screening. Keep null, conflicting and ambiguous evidence. Unknown experimental details stay unknown. Require exact supporting quotations for inclusion and preserve direction targets so expression changes are not mistaken for behavioral effects.
+Read every assigned complete abstract. Lexical matching or optional `triage` classification can annotate or prioritize records, but cannot silently exclude them from scientific screening. Keep null, conflicting and ambiguous evidence. Unknown experimental details stay unknown. Require exact supporting quotations for inclusion and preserve direction targets so expression changes are not mistaken for behavioral effects.
 
-Persist worker outputs using runtime output bindings. Validate assigned versus returned PMIDs, summary counts, enums, record hashes and quotation fidelity before import. A worker failure is unresolved work, not exclusion. Scientific interpretation still needs parent review.
+Persist worker outputs using runtime output bindings in Pi, or write and validate returned JSONL lines with `evidence-record` on harnesses that return worker responses in messages. Validate assigned versus returned PMIDs, summary counts, enums, record hashes and quotation fidelity before import. A worker failure is unresolved work, not exclusion. Scientific interpretation still needs parent review.
 
 ## Synthesis and follow-up
 
@@ -71,8 +71,9 @@ Resolve script paths relative to this skill directory. The [runbook](references/
 
 - `init`, `plan-search`: freeze approved context, ontology and exact queries.
 - `collect`: enumerate PMIDs and retrieve capped abstracts, resumably.
-- `jobs`: generate complete worker packets and workflow scripts; it launches nothing.
-- `evidence-validate`, `evidence-import`: validate and retain screening output with its actual runtime run ID.
+- `triage`, `triage-report`: optional Jev structured classification to prioritize screening order under a never-hard-exclude policy.
+- `jobs`: generate complete worker packets, portable JSON wave plans, and Pi workflow scripts; it launches nothing.
+- `evidence-validate`, `evidence-import`, `evidence-record`: validate and retain screening output with its actual runtime run ID.
 - `packet`, `status`: reopen sources and coverage without a new search.
 - `fulltext`: retain accessible BioC texts with verified identity, respecting the run quota.
 - `acknowledge-license --source`: record the PubMed or GWAS Catalog terms notification.

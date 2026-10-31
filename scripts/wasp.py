@@ -14,9 +14,24 @@ import sys
 
 from gwas_catalog import (CaptureError, CatalogError, CatalogMCP, infer_tool, page_info,
                           resolve_endpoint, unwrap)
+from jev_classifier import (JevClient, JevError, TRIAGE_POLICIES, resolve_jev_config)
 from wasp_core import (WaspError, Store, VERSION, atomic, load, normalize_ontology,
                           now, SKILL_ROOT)
 from pubmed_extension import PubmedBackend
+
+
+def default_pubmed_wrapper():
+    """Locate the sibling pubmed_database wrapper across common skill directories."""
+    candidates = [
+        SKILL_ROOT.parent / "pubmed_database" / "scripts" / "pubmed_api.py",
+        Path.home() / ".agents" / "skills" / "pubmed_database" / "scripts" / "pubmed_api.py",
+        Path.home() / ".pi" / "agent" / "skills" / "pubmed_database" / "scripts" / "pubmed_api.py",
+        Path.home() / ".claude" / "skills" / "pubmed_database" / "scripts" / "pubmed_api.py",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return str(candidates[1])
 
 
 class FixtureBackend:
@@ -76,7 +91,8 @@ def gwas_catalog_notification(store):
 def gwas_client(args, store):
     """Build the live GWAS Catalog MCP client for this workspace."""
     try:
-        url = resolve_endpoint(project_root=store.root, explicit=getattr(args, "endpoint", None))
+        url = resolve_endpoint(project_root=store.root, explicit=getattr(args, "endpoint", None),
+                               default_fallback=not getattr(args, "strict_mcp_config", False))
     except CatalogError as error:
         raise WaspError(str(error)) from None
     return CatalogMCP(url, timeout=args.timeout)
@@ -121,11 +137,12 @@ def parser():
     command.add_argument("source")
     command.add_argument("output")
     command = commands.add_parser("doctor", help="Offline dependency and agent checks")
-    command.add_argument("--pubmed-wrapper", default=str(Path.home() / ".agents/skills/pubmed_database/scripts/pubmed_api.py"))
-    command.add_argument("--agent-path", default=str(Path.home() / ".pi/agent/agents/concept-screener.md"))
+    command.add_argument("--pubmed-wrapper", default=default_pubmed_wrapper())
+    command.add_argument("--agent-path", default=None,
+                         help="Optional installed agent copy path (defaults to ~/.pi/agent/agents/concept-screener.md when present, otherwise canonical)")
     for name in ("init", "plan-search", "collect", "jobs", "evidence-validate", "evidence-import",
-                 "packet", "fulltext", "audit", "status", "acknowledge-license", "phenotype-search",
-                 "associations", "association-report"):
+                 "evidence-record", "triage", "triage-report", "packet", "fulltext", "audit",
+                 "status", "acknowledge-license", "phenotype-search", "associations", "association-report"):
         command = commands.add_parser(name)
         command.add_argument("workspace")
         if name == "init":
@@ -134,7 +151,7 @@ def parser():
         if name in ("collect", "fulltext"):
             command.add_argument("--run-id", required=name == "fulltext")
             command.add_argument("--fixture")
-            command.add_argument("--pubmed-wrapper", default=str(Path.home() / ".agents/skills/pubmed_database/scripts/pubmed_api.py"))
+            command.add_argument("--pubmed-wrapper", default=default_pubmed_wrapper())
         if name == "phenotype-search":
             command.add_argument("--query", help="Trait name to search")
             command.add_argument("--efo-id", help="Ontology shortform to look up")
@@ -142,6 +159,8 @@ def parser():
             command.add_argument("--limit", type=int, default=10)
             command.add_argument("--size", type=int, default=25)
             command.add_argument("--endpoint", help="Override the gwas-mcp URL")
+            command.add_argument("--strict-mcp-config", action="store_true",
+                                 help="Require an explicit mcp.json or env entry without falling back to the public EBI endpoint")
             command.add_argument("--timeout", type=int, default=60)
             command.add_argument("--output")
         if name == "associations":
@@ -152,6 +171,8 @@ def parser():
                                       "and omit to page live over MCP")
             command.add_argument("--cross-species-transfer", action="store_true")
             command.add_argument("--endpoint", help="Override the gwas-mcp URL")
+            command.add_argument("--strict-mcp-config", action="store_true",
+                                 help="Require an explicit mcp.json or env entry without falling back to the public EBI endpoint")
             command.add_argument("--timeout", type=int, default=60)
             command.add_argument("--page-size", type=int, default=50,
                                  help="Rows per MCP page; the server maximum is 50")
@@ -179,6 +200,24 @@ def parser():
             command.add_argument("--response", required=True)
         if name == "evidence-import":
             command.add_argument("--runtime-run-id", required=True)
+        if name == "evidence-record":
+            command.add_argument("--job", required=True)
+            command.add_argument("--response", help="File containing worker JSONL response lines")
+            command.add_argument("--stdin", action="store_true", help="Read worker JSONL response lines from stdin")
+            command.add_argument("--runtime-run-id", help="Optional runtime run ID to import immediately after validation")
+        if name == "triage":
+            command.add_argument("--run-id", required=True)
+            command.add_argument("--capture", action="append",
+                                 help="Saved Jev classification capture file; omit to classify live via HTTP")
+            command.add_argument("--policy", choices=TRIAGE_POLICIES, default="never-hard-exclude",
+                                 help="Triage policy (default: never-hard-exclude, which reroutes exclusions to needs_review)")
+            command.add_argument("--endpoint", help="Override the Jev classification API URL")
+            command.add_argument("--model", help="Override the Jev model identifier (default: typesafe/jev-latest)")
+            command.add_argument("--timeout", type=int, default=60)
+            command.add_argument("--output")
+        if name == "triage-report":
+            command.add_argument("--run-id")
+            command.add_argument("--output")
         if name == "packet":
             command.add_argument("--pmids", help="Comma-separated, verified PMIDs")
             command.add_argument("--gene")
@@ -202,13 +241,25 @@ def main(argv=None):
         return {"concepts": len(ontology["concepts"]), "output": str(Path(args.output).resolve())}
     if args.command == "doctor":
         original = SKILL_ROOT / "agents/concept-screener.md"
-        installed = Path(args.agent_path).expanduser()
+        pi_default = Path.home() / ".pi/agent/agents/concept-screener.md"
+        if args.agent_path is not None:
+            installed = Path(args.agent_path).expanduser()
+            mode = "explicit_agent_path"
+        elif pi_default.exists():
+            installed = pi_default
+            mode = "pi_installed"
+        else:
+            installed = original
+            mode = "canonical_bundle"
         return {"python": sys.version.split()[0], "uv": shutil.which("uv"),
                 "pubmed_wrapper": str(Path(args.pubmed_wrapper).expanduser()),
                 "pubmed_wrapper_exists": Path(args.pubmed_wrapper).expanduser().is_file(),
+                "canonical_agent": str(original),
+                "canonical_agent_exists": original.is_file(),
+                "agent_mode": mode,
                 "agent_exists": installed.is_file(),
                 "agent_matches_canonical": installed.is_file() and installed.read_bytes() == original.read_bytes(),
-                "note": "No network calls or model launches; use subagent list and doctor for effective runtime capabilities"}
+                "note": "No network calls or model launches; use the host harness subagent tools for runtime execution"}
     store = Store(args.workspace)
     with store.lock():
         if args.command == "init":
@@ -303,12 +354,59 @@ def main(argv=None):
                                 args.model)
             return {"job_count": result["job_count"], "dispatch_size": result["dispatch_size"],
                     "model": result["model"], "wave_paths": result["wave_paths"],
+                    "wave_json_paths": result["wave_json_paths"],
                     "jobs_index": str(store.base / "jobs-index.json"), "launched": False}
         if args.command == "evidence-validate":
             job, rows = store.validate_assessments(args.job, args.response)
             return {"valid": True, "job_id": job["job_id"], "records": len(rows)}
         if args.command == "evidence-import":
             return store.import_evidence(args.job, args.response, args.runtime_run_id)
+        if args.command == "evidence-record":
+            if bool(args.response) == bool(args.stdin):
+                raise WaspError("Pass either --response <path> or --stdin")
+            raw_text = sys.stdin.read() if args.stdin else Path(args.response).read_text(encoding="utf-8")
+            return store.record_assessments(args.job, raw_text, args.runtime_run_id)
+        if args.command == "triage":
+            if args.capture:
+                captures = [{"name": Path(path).name, "payload": load(path)} for path in args.capture]
+            else:
+                try:
+                    cfg = resolve_jev_config(explicit_url=args.endpoint, model=args.model)
+                except JevError as error:
+                    raise WaspError(str(error)) from None
+                client = JevClient(cfg["url"], cfg["api_key"], model=cfg["model"], timeout=args.timeout)
+                run_data = load(store.base / "runs" / (args.run_id + ".json"))
+                context_data = load(store.base / "context.json")
+                record_hashes = run_data.get("record_hashes", run_data.get("versions", {}))
+                rows = []
+                for search in run_data["searches"].values():
+                    gene = next(g for g in context_data["genes"] if g["symbol"] == search["gene"])
+                    for pmid in search["selected_pmids"]:
+                        version = record_hashes.get(pmid)
+                        if not version:
+                            continue
+                        article = store.article(pmid, version)
+                        if not article.get("abstract") or not article["abstract"].strip():
+                            continue
+                        try:
+                            rows.append(client.classify_one(gene, search["concept"], context_data,
+                                                            article | {"source_version": version}))
+                        except JevError as error:
+                            raise WaspError(str(error)) from None
+                captures = [{"name": f"live-jev-{args.run_id}.json", "payload": {"classifications": rows}}]
+            result = store.ingest_triage(captures, args.run_id, policy=args.policy)
+            if args.output:
+                if Path(args.output).exists():
+                    raise WaspError("Choose a new triage output path")
+                atomic(args.output, result)
+            return result
+        if args.command == "triage-report":
+            value = store.triage_report(args.run_id)
+            if args.output:
+                if Path(args.output).exists():
+                    raise WaspError("Choose a new triage report output path")
+                atomic(args.output, value)
+            return value
         if args.command == "packet":
             if Path(args.output).exists():
                 raise WaspError("Choose a new packet output path")

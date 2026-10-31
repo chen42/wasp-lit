@@ -1368,7 +1368,7 @@ class Store:
                                 and item.get("concept_id") == row["concept_id"]), None)
                 if matched is None:
                     errors.append("Triage row missing from its capture: " + row["pmid"])
-                elif any(row.get(k) != v for k, v in matched.items()):
+                elif any(row.get(k) != v for k, v in matched.items() if k != "species_in_scope" or "species_in_scope" in row):
                     errors.append("Triage row differs from its capture: " + row["pmid"])
             except (OSError, ValueError, KeyError, TypeError, JevCaptureError) as error:
                 errors.append(str(error))

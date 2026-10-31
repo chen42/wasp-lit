@@ -52,16 +52,17 @@ DEFAULT_INSTRUCTIONS = (
     "(including when only a generic family such as \"L-type calcium channels\" or \"CaV channels\" is mentioned without naming the specific gene or subunit), "
     "or when a matched token refers to a different entity. "
     "Concept: the specified concept is defined by the supplied name and term list. "
-    "Mark concept_addressed true when the abstract addresses the concept or one of its terms in the study's background, aims, methods, results, "
-    "pathway analysis, or review topic (including null or negative findings). "
+    "Mark concept_addressed true when the abstract addresses the concept or one of its terms in relation to the target gene, "
+    "experimental manipulation, pathway analysis, or review topic (including null or negative findings). "
     "Mark concept_addressed false when the concept is not addressed, when a matched word is used in an unrelated sense or homonym "
     "(such as serum withdrawal, doxycycline withdrawal, paw withdrawal reflex, or market withdrawal for addiction withdrawal), "
-    "or when a term appears only as generic trivia in an unrelated tissue study. "
+    "when the concept term is linked only to a different gene in the abstract, or when a term appears only as an unlinked disease risk factor, "
+    "demographic covariate, or generic trivia. "
     "Species scope: check the organism studied against scope.evidence_species. "
-    "Mark yes when the study uses an organism in scope.evidence_species, mammalian/human/rodent primary cells or cell lines "
-    "(such as HEK293, SH-SY5Y, PC12, or iPSC-derived cells), or is a review, computational analysis, or general cellular or biophysical study "
-    "where no non-target animal species is used. "
-    "Mark no when the study is conducted in a non-target organism outside scope.evidence_species "
+    "Mark yes when the study uses at least one organism in scope.evidence_species (even alongside a non-target preparation such as porcine tissue or Xenopus oocytes), "
+    "uses mammalian/human/rodent primary cells or cell lines (such as HEK293, SH-SY5Y, PC12, or iPSC-derived cells), "
+    "or is a review, computational analysis, or general cellular or biophysical study where no non-target animal species is used. "
+    "Mark no only when the study is restricted exclusively to non-target organisms outside scope.evidence_species "
     "(such as fish, zebrafish, medaka, birds, chicken, duck, amphibians, Xenopus, reptiles, turtle, guinea pig, sheep, pig, or cattle "
     "when scope is human, mouse, and rat). "
     "Decision: mark include when gene_identity is confirmed, concept_addressed is true, and species_in_scope is yes. "
@@ -131,18 +132,18 @@ def build_questions():
         },
         "concept_addressed": {
             "type": "noul",
-            "instructions": "Does the abstract address the specified ontology concept or its terms?",
+            "instructions": "Does the abstract address the specified ontology concept in relation to the target gene, experimental manipulation, pathway analysis, or review topic?",
             "criteria": {
-                "true": "The abstract addresses the specified concept or one of its terms in its background, aims, methods, results, or review discussion.",
-                "false": "The abstract does not address the specified concept or only uses a matched word in an unrelated sense, homonym, or generic unrelated trivia.",
+                "true": "The abstract addresses the specified concept or one of its terms in relation to the target gene, experimental system, pathway analysis, or review discussion (including null findings).",
+                "false": "The abstract does not address the concept, links the concept term only to a different gene, or uses a matched word only as a homonym, unlinked covariate/risk factor, or generic trivia.",
             },
         },
         "species_in_scope": {
             "type": "choice",
             "instructions": "Is the organism studied within the allowed evidence_species scope?",
             "criteria": {
-                "yes": "The study uses an organism or cell line within the allowed evidence-species scope, or is a review or general study that does not use a non-target organism.",
-                "no": "The study is conducted in a non-target organism outside the allowed evidence-species scope (such as fish, birds, amphibians, reptiles, or non-rodent livestock/laboratory animals).",
+                "yes": "The study uses at least one organism or cell line within the allowed evidence-species scope, or is a review or general study that does not restrict experiments to a non-target organism.",
+                "no": "The study is restricted exclusively to non-target organisms outside the allowed evidence-species scope (such as fish, birds, amphibians, reptiles, or non-rodent livestock/laboratory animals).",
                 "unclear": "An unusual organism is named and scope compatibility cannot be determined.",
             },
         },
@@ -293,6 +294,7 @@ def normalize_triage_row(raw, policy="never-hard-exclude"):
         "source_version": source_version,
         "gene_identity": gene_identity,
         "concept_addressed": concept_addressed,
+        "species_in_scope": species_in_scope,
         "raw_decision": raw_decision,
         "effective_decision": effective,
         "confidence": confidence,

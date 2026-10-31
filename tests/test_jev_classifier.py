@@ -98,6 +98,7 @@ class JevUnitTests(unittest.TestCase):
                 "decision": {"choice": "include", "probability": 0.61},
             },
         }
+        self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["species_in_scope"], "no")
         self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["raw_decision"], "exclude")
         self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["effective_decision"], "exclude")
         self.assertEqual(normalize_triage_row(out_of_scope, policy="never-hard-exclude")["effective_decision"], "needs_review")

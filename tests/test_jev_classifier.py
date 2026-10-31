@@ -103,6 +103,21 @@ class JevUnitTests(unittest.TestCase):
         self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["effective_decision"], "exclude")
         self.assertEqual(normalize_triage_row(out_of_scope, policy="never-hard-exclude")["effective_decision"], "needs_review")
 
+        contradictory_exclude = {
+            "pmid": "900000001",
+            "gene": "WASP_TEST_GENE",
+            "concept_id": "test/stress",
+            "source_version": "v1",
+            "answers": {
+                "gene_identity": {"choice": "confirmed"},
+                "concept_addressed": {"noul": 0.96},
+                "species_in_scope": {"choice": "yes"},
+                "decision": {"choice": "exclude", "probability": 0.58},
+            },
+        }
+        self.assertEqual(normalize_triage_row(contradictory_exclude, policy="raw")["raw_decision"], "include")
+        self.assertEqual(normalize_triage_row(contradictory_exclude, policy="raw")["effective_decision"], "include")
+
     def test_invalid_triage_rows_rejected(self):
         base = {
             "pmid": "900000001",

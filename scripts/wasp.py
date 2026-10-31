@@ -237,6 +237,7 @@ def parser():
             command.add_argument("--max-attempts", type=int, help="Optional explicit attempt bound, not a default")
             command.add_argument("--pmids", help="Comma-separated PMIDs to retrieve in the given order; bypasses the default priority selection")
             command.add_argument("--target", type=int, help="Stop after this many successful retrievals from --pmids (default: all listed PMIDs)")
+            command.add_argument("--reset", action="store_true", help="Reset full-text quota and selection state for this run before retrieving")
     return result
 
 
@@ -435,7 +436,8 @@ def main(argv=None):
             return {"output": str(Path(args.output).resolve()), "records": len(value["records"])}
         if args.command == "fulltext":
             state = store.fulltext(backend(args, store), args.run_id, args.max_attempts,
-                                   args.pmids.split(",") if args.pmids else None, args.target)
+                                   args.pmids.split(",") if args.pmids else None, args.target,
+                                   reset=args.reset)
             return {key: state[key] for key in ("quota", "retrieved", "attempts_this_call", "target_met",
                     "candidate_pool_exhausted", "blocked", "selection_mode")} | {
                     "run_path": str(store.base / "runs" / (args.run_id + ".json"))}

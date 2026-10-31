@@ -53,10 +53,11 @@ DEFAULT_INSTRUCTIONS = (
     "or when a matched token refers to a different entity. "
     "Concept: the specified concept is defined by the supplied name and term list. "
     "Mark concept_addressed true when the abstract addresses the concept or one of its terms in relation to the target gene, "
-    "experimental manipulation, pathway analysis, or review topic (including null or negative findings). "
+    "experimental manipulation, or review topic (including null or negative findings). "
     "Mark concept_addressed false when the concept is not addressed, when a matched word is used in an unrelated sense or homonym "
     "(such as serum withdrawal, doxycycline withdrawal, paw withdrawal reflex, or market withdrawal for addiction withdrawal), "
-    "when the concept term is linked only to a different gene in the abstract, or when a term appears only as an unlinked disease risk factor, "
+    "when the concept term is linked only to a different gene in the abstract, when a drug or addiction term appears only as an incidental "
+    "KEGG/GO pathway enrichment label in an unrelated non-neural disease screen, or when a term appears only as an unlinked disease risk factor, "
     "demographic covariate, or generic trivia. "
     "Species scope: check the organism studied against scope.evidence_species. "
     "Mark yes when the study uses at least one organism in scope.evidence_species (even alongside a non-target preparation such as porcine tissue or Xenopus oocytes), "
@@ -132,10 +133,10 @@ def build_questions():
         },
         "concept_addressed": {
             "type": "noul",
-            "instructions": "Does the abstract address the specified ontology concept in relation to the target gene, experimental manipulation, pathway analysis, or review topic?",
+            "instructions": "Does the abstract address the specified ontology concept in relation to the target gene, experimental manipulation, or review topic?",
             "criteria": {
-                "true": "The abstract addresses the specified concept or one of its terms in relation to the target gene, experimental system, pathway analysis, or review discussion (including null findings).",
-                "false": "The abstract does not address the concept, links the concept term only to a different gene, or uses a matched word only as a homonym, unlinked covariate/risk factor, or generic trivia.",
+                "true": "The abstract addresses the specified concept or one of its terms in relation to the target gene, experimental system, or review discussion (including null findings).",
+                "false": "The abstract does not address the concept, links the concept term only to a different gene, mentions a drug/addiction term only as an incidental KEGG/GO pathway label in an unrelated non-neural disease screen, or uses a matched word only as a homonym, unlinked covariate/risk factor, or generic trivia.",
             },
         },
         "species_in_scope": {
@@ -283,6 +284,9 @@ def normalize_triage_row(raw, policy="raw"):
     elif gene_identity == "absent" or not concept_addressed or species_in_scope == "no":
         raw_decision = "exclude"
         effective = "needs_review" if policy == "never-hard-exclude" else "exclude"
+    elif gene_identity == "confirmed" and concept_addressed and species_in_scope == "yes":
+        raw_decision = "include"
+        effective = "include"
     elif policy == "never-hard-exclude" and raw_decision == "exclude":
         effective = "needs_review"
     else:

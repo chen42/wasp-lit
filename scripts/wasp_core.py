@@ -896,11 +896,14 @@ class Store:
             result.update(self.import_evidence(job_path, output_path, runtime_run_id))
         return result
 
-    def fulltext(self, backend, run_id, max_attempts=None, pmids=None, target=None):
+    def fulltext(self, backend, run_id, max_attempts=None, pmids=None, target=None, reset=False):
         checked_run_id(run_id)
         run = load(self.base / "runs" / (run_id + ".json"))
         if max_attempts is not None:
             positive(max_attempts, "max_attempts")
+        if reset:
+            run["fulltext"] = {"quota": load(self.base / "context.json")["fulltext_quota"], "retrieved": 0, "outcomes": {}}
+            self.save_table("fulltexts", [])
         record_hashes = run.get("record_hashes", run.get("versions", {}))
         selected = set(record_hashes)
         if pmids is not None:
@@ -926,18 +929,40 @@ class Store:
         prioritized_concepts = set(context_data.get("concept_ids", []))
         prioritized_drugs = {cid for cid in prioritized_concepts
                              if isinstance(cid, str) and cid.startswith("drug/")}
-        tier0_concepts = {"phenotype/direct", "drug/nicotine"} | prioritized_drugs
+        tier0_concepts = {"phenotype/direct", "direct_phenotype", "drug/nicotine"} | prioritized_drugs
+        tier1_triage_concepts = {
+            cid for cid in prioritized_concepts
+            if isinstance(cid, str) and cid.split("/", 1)[0] in ("addiction", "drug", "brain", "test")
+        }
+        tier2_triage_concepts = {
+            "function/neuroplasticity",
+            "function/neurotransmission",
+            "cell/neuron",
+            "cell/astrocyte",
+            "cell/microglia",
+            "cell/oligodendrocyte",
+            "cell/glia",
+            "cell/stem cell",
+        }
         latest = {}
         for row in self.table("triage"):
             if row.get("policy", "raw") == "raw":
-                key = (row["gene"], row["concept_id"], row["pmid"], row["source_version"])
+                cid = row["concept_id"]
+                category = cid.split("/", 1)[0] if isinstance(cid, str) else ""
+                if cid in (tier0_concepts | tier1_triage_concepts):
+                    rel = "direct"
+                elif category in ("addiction", "drug", "brain", "psychiatric", "stress", "test") or cid in tier2_triage_concepts:
+                    rel = "indirect"
+                else:
+                    rel = "none"
+                key = (row["gene"], cid, row["pmid"], row["source_version"])
                 latest[key] = {
                     "gene": row["gene"],
-                    "concept_id": row["concept_id"],
+                    "concept_id": cid,
                     "pmid": row["pmid"],
                     "source_version": row["source_version"],
                     "decision": row.get("effective_decision"),
-                    "phenotype_relevance": "direct" if row["concept_id"] in (tier0_concepts | prioritized_concepts) else "indirect",
+                    "phenotype_relevance": rel,
                 }
         for evidence in self.table("evidence"):
             key = (evidence["gene"], evidence["concept_id"], evidence["pmid"], evidence["source_version"])
@@ -1831,6 +1856,7 @@ class Store:
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
         articles, evidence, triage = self.table("articles"), self.table("evidence"), self.table("triage")
+        articles_by_key = {(a["pmid"], a.get("source_version")): a for a in articles}
         latest = {}
         for row in triage:
             if row.get("policy", "raw") == "raw":
@@ -1849,7 +1875,10 @@ class Store:
                     missing.append(pmid)
                 else:
                     try:
-                        abstract = self.article(pmid, version).get("abstract")
+                        art = articles_by_key.get((pmid, version))
+                        if art is None:
+                            art = self.article(pmid, version)
+                        abstract = art.get("abstract")
                         if abstract and abstract.strip():
                             available.append((pmid, version))
                     except (OSError, WaspError, ValueError, KeyError, TypeError):

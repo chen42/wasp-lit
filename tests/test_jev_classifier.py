@@ -283,6 +283,65 @@ class CrossHarnessStoreAndCliTests(unittest.TestCase):
         self.assertFalse(audit_result["ok"])
         self.assertEqual(len(audit_result["errors"]), 4)
 
+    def test_top_level_corpus_layout_and_separated_human_ai_decisions(self):
+        self.assertEqual(self.store.base, self.store.root / "corpus")
+        self.assertTrue((self.store.root / "README.md").is_file())
+        self.assertTrue((self.store.root / "human-decisions.md").is_file())
+        self.assertTrue((self.store.root / "ai-decisions.md").is_file())
+        self.assertEqual(len(list(self.store.root.glob("*.json"))), 0)
+        self.assertEqual(len(list(self.store.root.glob("*.jsonl"))), 0)
+
+        ai_path = self.store.root / "ai-decisions.md"
+        ai_text = ai_path.read_text(encoding="utf-8")
+        ai_path.write_text(
+            ai_text.replace(
+                "<!-- AI-RATIONALE-START -->",
+                "<!-- AI-RATIONALE-START -->\nCustom AI concept rationale for stress signaling.",
+            ),
+            encoding="utf-8",
+        )
+        res = self.cli(
+            "human-decision",
+            self.temp.name,
+            "--stage",
+            "screening_override",
+            "--decision",
+            "Approved manual review of PMID 900000003",
+            "--rationale",
+            "Confirmed genotype in full text",
+            "--pmids",
+            "900000003",
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        human_md = (self.store.root / "human-decisions.md").read_text(encoding="utf-8")
+        self.assertIn("Approved manual review of PMID 900000003", human_md)
+        self.assertIn("screening_override", human_md)
+        self.assertEqual(len(self.store.table("human_decisions")), 2)
+
+        jobs = self.store.jobs("offline-test", batch_size=2)
+        item = jobs["jobs"][0]
+        job = load(item["path"])
+        rows = [assessment(p) for p in job["assigned_pmids"]]
+        summary = {"summary": {"concept": job["concept"]["name"], "gene": job["gene"]["symbol"],
+                               "assigned": len(rows), "include": len(rows), "exclude": 0,
+                               "needs_review": 0, "capped": job["capped"]}}
+        raw_jsonl = "\n".join(json.dumps(r) for r in rows + [summary]) + "\n"
+        self.store.record_assessments(item["path"], raw_jsonl, "worker-run-1")
+
+        updated_ai_md = ai_path.read_text(encoding="utf-8")
+        self.assertIn("Custom AI concept rationale for stress signaling.", updated_ai_md)
+        self.assertIn("Included Records (2)", updated_ai_md)
+        self.assertIn("900000003", updated_ai_md)
+        self.assertTrue(self.store.audit()["ok"], self.store.audit()["errors"])
+
+    def test_legacy_references_wasp_workspace_is_auto_detected(self):
+        with tempfile.TemporaryDirectory() as legacy_dir:
+            legacy_base = Path(legacy_dir) / "references" / "wasp"
+            legacy_base.mkdir(parents=True, exist_ok=True)
+            (legacy_base / "manifest.json").write_text('{"schema_version": 1}\n', encoding="utf-8")
+            legacy_store = Store(legacy_dir)
+            self.assertEqual(legacy_store.base, legacy_base.resolve())
+
 
 if __name__ == "__main__":
     unittest.main()

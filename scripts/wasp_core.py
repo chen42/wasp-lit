@@ -304,10 +304,39 @@ def enumerate_pmids(search, query, cap=200, uid_limit=UID_LIMIT, max_requests=20
     return result
 
 
+def _md_cell(value):
+    if value is None:
+        return "none"
+    text = re.sub(r"\s+", " ", str(value)).strip()
+    if not text:
+        return "none"
+    text = text.replace("|", "\\|")
+    text = text.replace("file://", "file:")
+    text = re.sub(r"(?<![/\w.-])([\w-]+)\.md\b", r"`\1.md`", text)
+    return text
+
+
+def _preserved_block(path, start_marker, end_marker, default_body):
+    if path.exists():
+        try:
+            existing = path.read_text(encoding="utf-8")
+            pattern = re.compile(re.escape(start_marker) + r"\n?(.*?)\n?" + re.escape(end_marker), re.DOTALL)
+            match = pattern.search(existing)
+            if match:
+                return match.group(1).strip()
+        except OSError:
+            pass
+    return default_body.strip()
+
+
 class Store:
     def __init__(self, root):
         self.root = Path(root).expanduser().resolve()
-        self.base = self.root / "references" / "wasp"
+        legacy_base = self.root / "references" / "wasp"
+        if (legacy_base / "manifest.json").exists() and not (self.root / "corpus" / "manifest.json").exists():
+            self.base = legacy_base
+        else:
+            self.base = self.root / "corpus"
 
     def require(self):
         if not (self.base / "manifest.json").exists():
@@ -355,12 +384,20 @@ class Store:
         immutable(self.base / "queries.json", plan_queries(context, ontology))
         immutable(self.base / "manifest.json", {"schema_version": 1, "wasp_version": VERSION,
                    "created_at": now(), "context_sha256": digest(context), "ontology_sha256": digest(ontology)})
-        readme = self.root / "README.md"
-        if not readme.exists():
-            readme.write_text("# wasp-lit research workspace\n\n"
-                              "Resume from `references/wasp/context.json`, `overview.json`, and `queries.json`.\n"
-                              "Original sources are immutable. Abstract limits and screening coverage are separate.\n",
-                              encoding="utf-8")
+        if not self.table("human_decisions"):
+            genes_label = ", ".join(g["symbol"] for g in context["genes"])
+            self.save_table("human_decisions", [{
+                "decision_id": "hd-" + digest({"stage": "scope_approval", "context": digest(context)})[:16],
+                "recorded_at": now(),
+                "stage": "scope_approval",
+                "decision": f"Approved initial scope for {genes_label} against {context['phenotype']}",
+                "rationale": (f"Reference organism: {context['reference_organism']}; "
+                              f"evidence species: {context['evidence_species']}; "
+                              f"priority concepts: {len(context['concept_ids'])} (cap {context['abstract_cap']}); "
+                              f"include_all_concepts: {context.get('include_all_concepts', False)}"),
+                "pmids": [],
+            }])
+        self.render_human_decisions()
         self.overview()
 
     def source(self, run_id, kind, payload, request=None, suffix=".json"):
@@ -1122,6 +1159,7 @@ class Store:
         run.update(state="collected" if complete else "incomplete", pair_count=len(association_rows),
                    evidence_count=len(evidence_rows), missing_groups=absent)
         self.save_association_run(run)
+        self.render_gwas_associations()
         self.overview()
         return {"run_id": run_id, "state": run["state"], "pairs": len(association_rows),
                 "evidence_records": len(evidence_rows), "missing_groups": absent,
@@ -1320,6 +1358,386 @@ class Store:
                 errors.append("Markdown prose contains bare unlinked .md filename (wrap in a relative link with descriptive label): " + rel)
         return errors
 
+    def log_human_decision(self, stage, decision, rationale=None, pmids=None):
+        """Record a human decision or override in corpus/human_decisions.jsonl and refresh human-decisions.md."""
+        if not isinstance(stage, str) or not stage.strip():
+            raise WaspError("stage must be a nonempty string")
+        if not isinstance(decision, str) or not decision.strip():
+            raise WaspError("decision must be a nonempty string")
+        cleaned_pmids = []
+        for value in pmids or []:
+            pmid = str(value).strip()
+            if not pmid:
+                continue
+            if not pmid.isdecimal():
+                raise WaspError("Invalid PMID in human decision: " + repr(value))
+            if pmid not in cleaned_pmids:
+                cleaned_pmids.append(pmid)
+        entry = {
+            "decision_id": "hd-" + uuid.uuid4().hex[:16],
+            "recorded_at": now(),
+            "stage": stage.strip(),
+            "decision": decision.strip(),
+            "rationale": rationale.strip() if isinstance(rationale, str) and rationale.strip() else None,
+            "pmids": cleaned_pmids,
+        }
+        rows = self.table("human_decisions") + [entry]
+        self.save_table("human_decisions", rows)
+        self.render_human_decisions()
+        return entry
+
+    def render_human_decisions(self):
+        """Render top-level human-decisions.md from context.json and corpus/human_decisions.jsonl."""
+        if not (self.base / "context.json").exists():
+            return
+        context = load(self.base / "context.json")
+        path = self.root / "human-decisions.md"
+        notes = _preserved_block(
+            path,
+            "<!-- HUMAN-NOTES-START -->",
+            "<!-- HUMAN-NOTES-END -->",
+            "Add manual review notes or scope clarifications here.",
+        )
+        genes_lines = []
+        for g in context["genes"]:
+            aliases = ", ".join(g.get("aliases") or []) or "none"
+            ncbi_id = g.get("ncbi_gene_id") or "not specified"
+            genes_lines.append(
+                f"- **{g['symbol']}** (NCBI Gene ID: {ncbi_id}; aliases: {aliases}; "
+                f"identity source: {_md_cell(g.get('identity_source'))})"
+            )
+        priority_concepts = context.get("concept_ids") or []
+        other_cap = context.get("other_abstract_cap", 30)
+        include_all = bool(context.get("include_all_concepts"))
+        decisions = self.table("human_decisions")
+        ledger_lines = [
+            "| Timestamp | Stage | Decision | Rationale | PMIDs |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        if decisions:
+            for item in decisions:
+                pmids_str = ", ".join(item.get("pmids") or []) or "none"
+                ledger_lines.append(
+                    f"| {_md_cell(item.get('recorded_at'))} | {_md_cell(item.get('stage'))} "
+                    f"| {_md_cell(item.get('decision'))} | {_md_cell(item.get('rationale'))} | {_md_cell(pmids_str)} |"
+                )
+        else:
+            ledger_lines.append("| none | none | No human decisions logged yet | none | none |")
+        rel_context = self.rel(self.base / "context.json")
+        rel_human_jsonl = self.rel(self.base / "human_decisions.jsonl")
+        content = "\n".join([
+            "# Human Decisions and Approved Scope",
+            "",
+            "This file records scope parameters, concept-cap approvals, and manual overrides approved by the human user. "
+            "Automated subagent screening and Jev triage classifications are logged separately in the "
+            "[AI decision and screening log](./ai-decisions.md).",
+            "",
+            "## Approved Scope and Search Parameters",
+            "",
+            "- **Target Genes**:",
+            *genes_lines,
+            f"- **Phenotype**: {_md_cell(context.get('phenotype'))}",
+            f"- **Direct Phenotype Terms**: {_md_cell(', '.join(context.get('phenotype_terms') or []))}",
+            f"- **Reference Organism**: {_md_cell(context.get('reference_organism'))}",
+            f"- **Evidence Species**: {_md_cell(context.get('evidence_species'))}",
+            f"- **High-Priority Abstract Cap**: {context.get('abstract_cap')} newest papers per gene-concept query",
+            f"- **Broad-Scan Abstract Cap**: {other_cap if include_all else 'not enabled (priority concepts only)'}",
+            f"- **Full-Text Retrieval Quota**: {context.get('fulltext_quota')}",
+            f"- **Frozen Context Record**: [frozen context JSON](./{rel_context})",
+            "",
+            "## Approved High-Priority Concepts",
+            "",
+            *(
+                [f"- {cid} (cap {context.get('abstract_cap')})" for cid in priority_concepts]
+                if priority_concepts else ["- None specified"]
+            ),
+            "",
+            "## Human Approval and Override Ledger",
+            "",
+            f"Machine provenance table: [human decisions JSONL](./{rel_human_jsonl})",
+            "",
+            *ledger_lines,
+            "",
+            "## Human Notes",
+            "",
+            "<!-- HUMAN-NOTES-START -->",
+            notes,
+            "<!-- HUMAN-NOTES-END -->",
+            "",
+        ])
+        path.write_text(content, encoding="utf-8")
+
+    def render_ai_decisions(self, overview_data=None):
+        """Render top-level ai-decisions.md with AI concept rationale, Jev triage summary, and per-PMID subagent screening tables."""
+        if not (self.base / "context.json").exists() or not (self.base / "queries.json").exists():
+            return
+        context = load(self.base / "context.json")
+        queries = load(self.base / "queries.json")
+        overview_data = overview_data or (load(self.base / "overview.json") if (self.base / "overview.json").exists() else {})
+        path = self.root / "ai-decisions.md"
+        default_rationale = (
+            "Document the AI coordinator rationale for selecting high-priority ontology concepts (cap "
+            f"{context.get('abstract_cap')}) versus broad-scan ontology concepts (cap "
+            f"{context.get('other_abstract_cap', 30)}) based on baseline gene function and phenotype terms."
+        )
+        rationale = _preserved_block(
+            path,
+            "<!-- AI-RATIONALE-START -->",
+            "<!-- AI-RATIONALE-END -->",
+            default_rationale,
+        )
+        priority_queries = [q for q in queries if q.get("lane") == "contextual" and q.get("concept_priority") != "other"]
+        scan_queries = [q for q in queries if q.get("lane") == "contextual" and q.get("concept_priority") == "other"]
+        direct_queries = [q for q in queries if q.get("lane") == "direct"]
+
+        triage_rows = self.table("triage")
+        triage_section = ["## Jev Triage Classifications", ""]
+        if triage_rows:
+            eff_counts = Counter(r.get("effective_decision") for r in triage_rows)
+            raw_counts = Counter(r.get("raw_decision") for r in triage_rows)
+            rerouted = sum(1 for r in triage_rows if r.get("raw_decision") == "exclude" and r.get("effective_decision") == "needs_review")
+            rel_triage = self.rel(self.base / "triage.jsonl")
+            triage_section.extend([
+                f"- **Triaged Gene-Concept-PMID Pairs**: {len(triage_rows)}",
+                f"- **Effective Decisions**: include={eff_counts.get('include', 0)}, needs_review={eff_counts.get('needs_review', 0)}, exclude={eff_counts.get('exclude', 0)}",
+                f"- **Raw Model Decisions**: include={raw_counts.get('include', 0)}, needs_review={raw_counts.get('needs_review', 0)}, exclude={raw_counts.get('exclude', 0)}",
+                f"- **Exclusions Rerouted Under Never-Hard-Exclude Policy**: {rerouted}",
+                f"- **Machine Triage Table**: [triage JSONL](./{rel_triage})",
+                "",
+            ])
+        else:
+            triage_section.extend([
+                "No Jev pre-screening triage run recorded for this workspace.",
+                "",
+            ])
+
+        strata_lines = [
+            "| Run ID | Gene | Concept | Total Hits | Selected | Cap Reached | Included | Needs Review | Excluded | Unassessed |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        runs = overview_data.get("runs") or []
+        if runs:
+            for r in runs:
+                for s in r.get("strata") or []:
+                    d = s.get("screening_decisions") or {}
+                    strata_lines.append(
+                        f"| {_md_cell(r.get('run_id'))} | {_md_cell(s.get('gene'))} | {_md_cell(s.get('concept_id'))} "
+                        f"| {s.get('available', 0)} | {s.get('selected', 0)} | {'yes' if s.get('capped') else 'no'} "
+                        f"| {d.get('include', 0)} | {d.get('needs_review', 0)} | {d.get('exclude', 0)} | {d.get('unassessed', 0)} |"
+                    )
+        else:
+            strata_lines.append("| none | none | none | 0 | 0 | no | 0 | 0 | 0 | 0 |")
+
+        evidence = self.table("evidence")
+        latest_map = {}
+        for item in evidence:
+            latest_map[(item["gene"], item["concept_id"], item["pmid"], item["source_version"])] = item
+        latest_rows = sorted(latest_map.values(), key=lambda x: (x["gene"], x["concept_id"], int(x["pmid"])))
+        included = [r for r in latest_rows if r.get("decision") == "include"]
+        needs_review = [r for r in latest_rows if r.get("decision") == "needs_review"]
+        excluded = [r for r in latest_rows if r.get("decision") == "exclude"]
+
+        inc_lines = [
+            "| PMID | Gene | Concept | Species | Design | Direction | Target | Finding | Verbatim Quotation |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        if included:
+            for r in included:
+                inc_lines.append(
+                    f"| {r['pmid']} | {_md_cell(r.get('gene'))} | {_md_cell(r.get('concept_id'))} "
+                    f"| {_md_cell(r.get('species'))} | {_md_cell(r.get('study_design'))} "
+                    f"| {_md_cell(r.get('direction'))} | {_md_cell(r.get('direction_target'))} "
+                    f"| {_md_cell(r.get('finding'))} | {_md_cell(r.get('quotation'))} |"
+                )
+        else:
+            inc_lines.append("| none | none | none | none | none | none | none | No included records yet | none |")
+
+        rev_lines = [
+            "| PMID | Gene | Concept | Gene Identity | Concept Support | Finding | Reason |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        if needs_review:
+            for r in needs_review:
+                rev_lines.append(
+                    f"| {r['pmid']} | {_md_cell(r.get('gene'))} | {_md_cell(r.get('concept_id'))} "
+                    f"| {_md_cell(r.get('gene_identity'))} | {_md_cell(r.get('concept_support'))} "
+                    f"| {_md_cell(r.get('finding'))} | {_md_cell(r.get('reason'))} |"
+                )
+        else:
+            rev_lines.append("| none | none | none | none | none | none | No records flagged for review |")
+
+        exc_lines = [
+            "| PMID | Gene | Concept | Gene Identity | Concept Support | Exclusion Reason |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+        if excluded:
+            for r in excluded:
+                exc_lines.append(
+                    f"| {r['pmid']} | {_md_cell(r.get('gene'))} | {_md_cell(r.get('concept_id'))} "
+                    f"| {_md_cell(r.get('gene_identity'))} | {_md_cell(r.get('concept_support'))} "
+                    f"| {_md_cell(r.get('reason'))} |"
+                )
+        else:
+            exc_lines.append("| none | none | none | none | none | No excluded records yet |")
+
+        rel_queries = self.rel(self.base / "queries.json")
+        rel_evidence = self.rel(self.base / "evidence.jsonl")
+        content = "\n".join([
+            "# AI Coordinator and Subagent Screening Decisions",
+            "",
+            "This file records decisions made by the AI coordinator, Jev pre-screening classifier, and read-only "
+            "concept-screening subagents. Scope approvals and overrides made by the human user are logged separately "
+            "in the [human decision log](./human-decisions.md).",
+            "",
+            "## AI Concept-Domain Prioritization Rationale",
+            "",
+            "<!-- AI-RATIONALE-START -->",
+            rationale,
+            "<!-- AI-RATIONALE-END -->",
+            "",
+            "<!-- AI-LEDGER-START -->",
+            "## Planned Query Distribution",
+            "",
+            f"- **Direct Gene-Phenotype Queries**: {len(direct_queries)}",
+            f"- **High-Priority Concept Queries**: {len(priority_queries)} (cap {context.get('abstract_cap')})",
+            f"- **Broad-Scan Concept Queries**: {len(scan_queries)} (cap {context.get('other_abstract_cap', 30) if scan_queries else 0})",
+            f"- **Machine Query Plan**: [planned queries JSON](./{rel_queries})",
+            "",
+            *triage_section,
+            "## Stratum Retrieval and Screening Coverage",
+            "",
+            *strata_lines,
+            "",
+            "## Subagent Abstract Screening Ledger",
+            "",
+            f"Machine evidence table: [assessed evidence JSONL](./{rel_evidence})",
+            "",
+            f"### Included Records ({len(included)})",
+            "",
+            *inc_lines,
+            "",
+            f"### Records Flagged for Review ({len(needs_review)})",
+            "",
+            *rev_lines,
+            "",
+            f"### Excluded Records ({len(excluded)})",
+            "",
+            *exc_lines,
+            "<!-- AI-LEDGER-END -->",
+            "",
+        ])
+        path.write_text(content, encoding="utf-8")
+
+    def render_gwas_associations(self):
+        """Render top-level gwas-associations.md from corpus/associations.jsonl and corpus/association_evidence.jsonl."""
+        rows = self.table("associations")
+        evidence = self.table("association_evidence")
+        if not rows and not evidence:
+            return
+        report = self.association_report()
+        pair_lines = [
+            "| Gene | Phenotype ID | Trait Name | Complete | Associations | Strongest P-Value | Lead Alleles | PMIDs |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for pair in report.get("pairs") or []:
+            alleles = ", ".join((pair.get("effect_alleles") or [])[:5]) or "none"
+            pmids = ", ".join((pair.get("pmids") or [])[:5]) or "none"
+            pair_lines.append(
+                f"| {_md_cell(pair.get('gene'))} | {_md_cell(pair.get('phenotype_id'))} "
+                f"| {_md_cell(pair.get('phenotype_name'))} | {'yes' if pair.get('complete') else 'no'} "
+                f"| {pair.get('association_count', 0)} | {_md_cell(pair.get('strongest_p_value'))} "
+                f"| {_md_cell(alleles)} | {_md_cell(pmids)} |"
+            )
+        ev_lines = [
+            "| Gene | Phenotype ID | Reported Trait | Effect Allele | P-Value | OR | Beta | Study Accession | PMID |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        if evidence:
+            for item in evidence:
+                alleles = ", ".join(item.get("snp_effect_allele") or []) or "none"
+                ev_lines.append(
+                    f"| {_md_cell(item.get('gene'))} | {_md_cell(item.get('phenotype_id'))} "
+                    f"| {_md_cell(item.get('reported_trait'))} | {_md_cell(alleles)} "
+                    f"| {_md_cell(item.get('p_value'))} | {_md_cell(item.get('or_value'))} "
+                    f"| {_md_cell(item.get('beta'))} | {_md_cell(item.get('accession_id'))} "
+                    f"| {_md_cell(item.get('pubmed_id'))} |"
+                )
+        else:
+            ev_lines.append("| none | none | No individual variant associations recorded | none | none | none | none | none | none |")
+        rel_assoc = self.rel(self.base / "associations.jsonl")
+        rel_ev = self.rel(self.base / "association_evidence.jsonl")
+        content = "\n".join([
+            "# GWAS Catalog Human Genetic Associations",
+            "",
+            "This file summarizes human genome-wide association records captured from the NHGRI-EBI GWAS Catalog. "
+            "Mapped genes in the GWAS Catalog are assigned by genomic proximity and do not establish causal gene "
+            "identity without functional validation.",
+            "",
+            f"- **Machine Pair Summary**: [associations JSONL](./{rel_assoc})",
+            f"- **Machine Variant Evidence**: [association evidence JSONL](./{rel_ev})",
+            f"- **Absence Interpretation**: {report.get('absence_statement')}",
+            "",
+            "## Gene-Trait Pair Summary",
+            "",
+            *pair_lines,
+            "",
+            "## Recorded Variant-Trait Associations",
+            "",
+            *ev_lines,
+            "",
+        ])
+        (self.root / "gwas-associations.md").write_text(content, encoding="utf-8")
+
+    def render_readme(self, overview_data=None):
+        """Render top-level README.md with workspace status and links to human-readable Markdown deliverables."""
+        if not (self.base / "context.json").exists():
+            return
+        context = load(self.base / "context.json")
+        overview_data = overview_data or (load(self.base / "overview.json") if (self.base / "overview.json").exists() else {})
+        path = self.root / "README.md"
+        notes = _preserved_block(
+            path,
+            "<!-- README-NOTES-START -->",
+            "<!-- README-NOTES-END -->",
+            "Original sources in the corpus directory are immutable. Abstract caps and screening coverage are tracked separately.",
+        )
+        genes_label = ", ".join(g["symbol"] for g in context["genes"])
+        decisions = overview_data.get("decision_counts") or {}
+        rel_context = self.rel(self.base / "context.json")
+        rel_overview = self.rel(self.base / "overview.json")
+        rel_queries = self.rel(self.base / "queries.json")
+        content = "\n".join([
+            f"# wasp-lit Workspace: {genes_label} and {context.get('phenotype')}",
+            "",
+            "## Top-Level Human-Readable Documents",
+            "",
+            "- [Evidence synthesis](./synthesis.md): Narrative synthesis integrating baseline gene biology, GWAS associations, and screened PubMed evidence.",
+            "- [Human decision log](./human-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
+            "- [AI decision and screening log](./ai-decisions.md): AI concept-prioritization rationale, Jev triage summary, and per-PMID subagent screening tables.",
+            "- [Baseline gene function summary](./gene-function.md): Baseline molecular, expression, and structural context.",
+            "- [GWAS association summary](./gwas-associations.md): Human GWAS Catalog variant and trait summary (when GWAS enrichment is run).",
+            "",
+            "## Corpus Summary",
+            "",
+            f"- **Unique Discovered PMIDs**: {overview_data.get('unique_discovered_pmids', 0)}",
+            f"- **Retrieved Articles**: {overview_data.get('article_count', 0)} (available abstracts: {overview_data.get('available_abstracts', 0)}; missing abstracts: {overview_data.get('missing_abstracts', 0)})",
+            f"- **Assessed Gene-Concept-PMID Records**: {overview_data.get('assessment_records', 0)} (include: {decisions.get('include', 0)}; needs_review: {decisions.get('needs_review', 0)}; exclude: {decisions.get('exclude', 0)})",
+            f"- **Retrieved Full Texts**: {overview_data.get('fulltext_count', 0)}",
+            f"- **GWAS Catalog Gene-Trait Pairs**: {overview_data.get('association_pairs', 0)} (variant records: {overview_data.get('association_evidence_records', 0)})",
+            "",
+            "## Machine State (Corpus Directory)",
+            "",
+            f"- [Frozen context JSON](./{rel_context})",
+            f"- [Planned queries JSON](./{rel_queries})",
+            f"- [Corpus overview JSON](./{rel_overview})",
+            "",
+            "<!-- README-NOTES-START -->",
+            notes,
+            "<!-- README-NOTES-END -->",
+            "",
+        ])
+        path.write_text(content, encoding="utf-8")
+
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
         articles, evidence = self.table("articles"), self.table("evidence")
@@ -1367,6 +1785,8 @@ class Store:
                  "runs": [{"run_id": r["run_id"], "status": r["status"], "missing_records": r.get("missing_records", []),
                            "strata": [coverage(r, q) for q in r["searches"].values()]} for r in runs]}
         atomic(self.base / "overview.json", value)
+        self.render_readme(value)
+        self.render_ai_decisions(value)
         return value
 
     def packet(self, pmids=None, gene=None, concept_id=None, limit=10):

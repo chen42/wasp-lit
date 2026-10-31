@@ -25,15 +25,20 @@ Then `/reload` in Pi. Do not overwrite unrelated Pi settings or pin the model th
 
 ## Initialize approved scope
 
-Copy `templates/context.example.json` into the research project, fill every identity and scope field, then remove `_template`. Initialization deliberately rejects an unfilled template. Select concept IDs from the normalized resource. JSON configuration is required for the CLI; research notes use Markdown.
+Copy `templates/context.example.json` into the workspace's `corpus/` directory, fill every identity and scope field, then remove `_template`. Initialization deliberately rejects an unfilled template. Select concept IDs from the normalized resource. JSON configuration is required for the CLI; human-readable deliverables at the top level use Markdown.
 
 ```bash
-PROJECT="/absolute/path/to/research-project"
-python3 "$SKILL/scripts/wasp.py" init "$PROJECT" --context "$PROJECT/approved-context.json"
+PROJECT="/absolute/path/to/wasp-lit-cacna1c-nicotine"
+mkdir -p "$PROJECT/corpus"
+python3 "$SKILL/scripts/wasp.py" init "$PROJECT" --context "$PROJECT/corpus/approved-context.json"
 python3 "$SKILL/scripts/wasp.py" plan-search "$PROJECT"
+python3 "$SKILL/scripts/wasp.py" human-decision "$PROJECT" \
+  --stage "concept_prioritization" \
+  --decision "Approved high-priority concept caps (200) and broad-scan caps (30)" \
+  --rationale "Prioritized calcium channel, synaptic plasticity, and mesolimbic reward concepts"
 ```
 
-Read the generated `references/wasp/queries.json` before live collection. Context and ontology are frozen for this workspace. Concept `terms` retains the full interpretation vocabulary; optional `search_terms` selects the retrieval subset. If a concept has a subset, adding a term only to `terms` does not add a query alternative. Follow [keyword roles](keyword-roles.md) when changing the vocabulary, and use a new workspace for either kind of revision.
+Read the generated `corpus/queries.json`, `human-decisions.md`, and `ai-decisions.md` before live collection. Context and ontology are frozen for this workspace. Concept `terms` retains the full interpretation vocabulary; optional `search_terms` selects the retrieval subset. If a concept has a subset, adding a term only to `terms` does not add a query alternative. Follow [keyword roles](keyword-roles.md) when changing the vocabulary, and use a new workspace for either kind of revision.
 
 ## Live collection
 

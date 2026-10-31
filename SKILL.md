@@ -11,7 +11,7 @@ Build a persistent literature corpus, screen its sources, and answer questions f
 
 ## Establish scope
 
-Read [workflow](references/workflow.md) and [gene function context and concept prioritization](references/gene-function-context.md), and inspect the research workspace before starting. For each gene, retrieve NCBI Gene and WikiGenes function context before prioritizing PubMed concepts; save function-only extracts in the project's `references/gene-function/`. Ask for material missing inputs:
+Read [workflow](references/workflow.md) and [gene function context and concept prioritization](references/gene-function-context.md), and inspect the research workspace before starting. Name each workspace `wasp-lit-<gene>-<phenotype>/` (or `wasp-lit-<genes>-<phenotype>/` for multi-gene runs) so multiple searches can coexist without collision. Keep human-readable files at the top level in Markdown (`README.md`, `synthesis.md`, `human-decisions.md`, `ai-decisions.md`, `gene-function.md`, and `gwas-associations.md`), and store machine JSON/JSONL state under `corpus/`. Separate human decisions (`human-decisions.md`, updated via `wasp.py human-decision`) from AI coordinator, Jev triage, and subagent screening decisions (`ai-decisions.md`). For each gene, retrieve NCBI Gene and WikiGenes function context before prioritizing PubMed concepts; save raw function-only JSON extracts in `corpus/gene-function/` and write the human-readable baseline summary in `gene-function.md` (or `gene-function/<GENE>.md` when evaluating multiple genes). Ask for material missing inputs:
 
 - Genes with explicit reference organism and verified aliases or user-confirmed identities.
 - Phenotype and agreed search vocabulary. Keep related behavioral endpoints distinct.
@@ -61,9 +61,9 @@ Follow the relevant `weaver-text` source-capture, citation and literature-synthe
 
 Cite empirical claims with adjacent PMID links, for example `[PMID: verified-ID](https://pubmed.ncbi.nlm.nih.gov/verified-ID/)`. Use only IDs present in the corpus. Label preprints and state whether evidence came from an abstract or full text. DOI identity alone does not link a preprint to its published version. Publication notices require a separate documented check.
 
-In all saved workspace Markdown files (`synthesis.md`, `selected-concept-domains.md`, `search-record.md`, and research notes), use standard portable Markdown:
-- Never use `file://` URIs in saved `.md` files (even if the host chat UI uses `file://` in conversation messages); `markdown-it` and `markdown-preview.nvim` reject the `file:` scheme and leave raw bracketed text unrendered. Always link local workspace files using relative POSIX paths starting with `./` or `../`, such as `[NCBI Gene summary](../gene-function/CACNA1C-ncbi-gene.json)`.
-- Use natural-language link text rather than filenames ending in `.md` (write `[selected concept domains](./selected-concept-domains.md)`, never `[selected-concept-domains.md](...)` or bare `selected-concept-domains.md` in prose), so Markdown `linkify` passes do not mistake `.md` for Moldova's top-level domain.
+In all saved workspace Markdown files (`synthesis.md`, `human-decisions.md`, `ai-decisions.md`, `gene-function.md`, `gwas-associations.md`, and `README.md`), use standard portable Markdown:
+- Never use `file://` URIs in saved `.md` files (even if the host chat UI uses `file://` in conversation messages); `markdown-it` and `markdown-preview.nvim` reject the `file:` scheme and leave raw bracketed text unrendered. Always link local workspace files using relative POSIX paths starting with `./` or `../`, such as `[NCBI Gene summary](./corpus/gene-function/CACNA1C-ncbi-gene.json)`.
+- Use natural-language link text rather than filenames ending in `.md` (write `[AI decision and screening log](./ai-decisions.md)`, never `[ai-decisions.md](...)` or bare `ai-decisions.md` in prose), so Markdown `linkify` passes do not mistake `.md` for Moldova's top-level domain.
 - Do not wrap gene symbols, protein names, anatomical terms, or ontology concept domains in inline-code backticks in narrative prose (write `CACNA1C`, `CaV1.2`, and "the nicotine and reward domains", not `` `CACNA1C` `` or `` `drug/nicotine` ``). Reserve backticks for literal SHA-256 hashes or run IDs in the provenance section. `wasp.py audit` verifies saved workspace `.md` files against `file://` URIs and `.md` linkify traps.
 
 For focused candidate-gene evaluations, use the local [synthesis prompt](synthesis_prompt.txt) and briefly state gene function with links to the NCBI and WikiGenes function records. Immediately follow with a brief "Anatomical expression" section: widespread versus restricted tissue/brain-region expression and reported cell types, with species-specific citations and enrichment distinguished from specificity. State when those details are not established by the available sources. Name the gene-function-prioritized concept domains and the other ontology concepts searched, and report the separate GWAS lane. State the most likely molecular mechanism or evidence-supported chain with citations, distinguishing observations from inferred links and plausibility from causality. Include conflicting and null findings where present. Do not add a generic limitations section; place specific caveats alongside the claims they qualify. Keep scope and search methods concise, devote most of the word budget to literature evidence, do not put the conclusion in the opening, and end with a balanced candidate-plausibility assessment. Follow any user-specified word limit as a hard limit; default to at most 800 words excluding citations unless asked otherwise. Complete PMID enumeration does not establish complete abstract screening, and even a fully screened scoped set cannot establish universal absence of published evidence.
@@ -74,18 +74,19 @@ For later conversations, read context, overview and a question-specific packet, 
 
 Resolve script paths relative to this skill directory. The [runbook](references/runbook.md) gives full commands and the agent-install procedure.
 
-- `init`, `plan-search`: freeze approved context, ontology and exact queries.
+- `init`, `plan-search`: freeze approved context, ontology and exact queries in `corpus/`, and render `README.md`, `human-decisions.md`, and `ai-decisions.md` at the workspace root.
+- `human-decision`: record a user-approved scope change, concept-cap approval, or manual screening override in `corpus/human_decisions.jsonl` and refresh `human-decisions.md`.
 - `collect`: enumerate PMIDs and retrieve capped abstracts, resumably.
-- `triage`, `triage-report`: optional Jev structured classification to prioritize screening order under a never-hard-exclude policy.
+- `triage`, `triage-report`: optional Jev structured classification to prioritize screening order under a never-hard-exclude policy, updating `ai-decisions.md`.
 - `jobs`: generate complete worker packets, portable JSON wave plans, and Pi workflow scripts; it launches nothing.
-- `evidence-validate`, `evidence-import`, `evidence-record`: validate and retain screening output with its actual runtime run ID.
+- `evidence-validate`, `evidence-import`, `evidence-record`: validate and retain screening output with its actual runtime run ID, automatically refreshing the subagent screening ledger in `ai-decisions.md`.
 - `packet`, `status`: reopen sources and coverage without a new search.
 - `fulltext`: retain accessible BioC texts with verified identity, respecting the run quota.
 - `acknowledge-license --source`: record the PubMed or GWAS Catalog terms notification.
 - `phenotype-search`: resolve a trait name, ID, or saved MCP capture to an ontology ID.
-- `associations`: page the GWAS Catalog over MCP and retain gene-trait associations for a run.
+- `associations`: page the GWAS Catalog over MCP, retain gene-trait associations in `corpus/`, and render `gwas-associations.md`.
 - `association-report`: report the retained associations for a run with their variants, studies and PMIDs.
-- `audit`: check source integrity, membership, record hashes and quotations.
+- `audit`: check source integrity, membership, record hashes, quotations, and Markdown portability.
 - `scripts/wikigenes.py`: retrieve function-related WikiGenes sections for human, mouse and rat; see `references/wikigenes.md` and `references/gene-function-context.md`.
 
 Run `python3 -m unittest discover -s tests -v` for offline validation. Synthetic tests are not literature evidence. Live pilot acceptance requires user-selected genes, phenotype and species scope, reconciled PMIDs, validated worker outputs, accessible full text where available, and a fresh-session source-reopening check.

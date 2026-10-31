@@ -56,7 +56,27 @@ wasp-lit/
 
 ## Project workspace
 
-The CLI writes `references/wasp/` in the research project: frozen `context.json`, `ontology.json`, and `queries.json`; `runs/`, `membership.jsonl`, and `articles.jsonl`; immutable `sources/`; screening `jobs/` and `evidence.jsonl`; `fulltexts.jsonl`; and derived `overview.json` and `audit.json`. Gene-function extracts go in `references/gene-function/`. See [corpus and resume](references/corpus-and-resume.md).
+Create one top-level folder per search named `wasp-lit-<gene>-<phenotype>/` (or `wasp-lit-<genes>-<phenotype>/`). Human-facing deliverables live at the top level as portable Markdown files, while all machine JSON/JSONL tables and immutable source responses live inside `corpus/` (existing legacy workspaces under `references/wasp/` remain supported):
+
+```text
+wasp-lit-<gene>-<phenotype>/
+├── README.md                  # Run status, corpus counts, and guide to top-level Markdown files
+├── synthesis.md               # Narrative candidate-gene plausibility synthesis
+├── human-decisions.md         # Human-approved scope, concept caps, and manual overrides
+├── ai-decisions.md            # AI concept-cap rationale, Jev triage summary, and subagent screening ledger
+├── gene-function.md           # Baseline gene/protein biology (or gene-function/<GENE>.md for multi-gene runs)
+├── gwas-associations.md       # Human-readable GWAS Catalog summary table
+└── corpus/                    # Machine state and immutable source cache
+    ├── manifest.json, context.json, ontology.json, queries.json
+    ├── overview.json, audit.json
+    ├── articles.jsonl, membership.jsonl, evidence.jsonl, triage.jsonl, fulltexts.jsonl
+    ├── human_decisions.jsonl, associations.jsonl, association_evidence.jsonl
+    ├── gene-function/         # Raw JSON extracts from NCBI Gene, WikiGenes, UniProt, Ensembl, GTEx
+    ├── runs/, jobs/, waves/, assessments/
+    └── sources/
+```
+
+See [corpus and resume](references/corpus-and-resume.md).
 
 ## Companion skills
 

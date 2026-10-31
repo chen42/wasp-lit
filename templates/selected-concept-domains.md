@@ -2,7 +2,7 @@
 
 Phenotype: [target phenotype]
 Date: [date]
-Function context: [relative `./` or `../` links under `references/gene-function/` using descriptive link labels; never use `file://` URIs or `.md` filenames in link labels]
+Function context: [relative `./corpus/gene-function/` links using descriptive link labels; never use `file://` URIs or `.md` filenames in link labels. In standard workspaces, record this rationale directly in the `AI Concept-Domain Prioritization Rationale` section of `./ai-decisions.md`.]
 
 ## [Gene symbol] ([reference organism])
 

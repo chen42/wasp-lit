@@ -628,8 +628,12 @@ class Store:
             latest[(e["gene"], e["concept_id"], e["pmid"], e["source_version"], e["rubric_sha256"])] = e
         settled = {key for key, evidence in latest.items() if evidence["decision"] in ("include", "exclude")}
         triage_lookup = {}
+        triage_settled = set()
         for row in self.table("triage"):
-            triage_lookup[(row["gene"], row["concept_id"], row["pmid"], row["source_version"])] = row
+            triage_key = (row["gene"], row["concept_id"], row["pmid"], row["source_version"])
+            triage_lookup[triage_key] = row
+            if row.get("policy", "raw") == "raw" and row.get("effective_decision") in ("include", "exclude"):
+                triage_settled.add(triage_key)
         record_hashes = run.get("record_hashes", run.get("versions", {}))
         jobs = []
         for qid, search in run["searches"].items():
@@ -646,7 +650,10 @@ class Store:
                 selected_pmids.sort(key=triage_rank)
             for pmid in selected_pmids:
                 record_hash = record_hashes.get(pmid)
-                if not record_hash or (search["gene"], search["concept"]["id"], pmid, record_hash, file_hash(rubric)) in settled:
+                pair_version_key = (search["gene"], search["concept"]["id"], pmid, record_hash)
+                if (not record_hash
+                        or (search["gene"], search["concept"]["id"], pmid, record_hash, file_hash(rubric)) in settled
+                        or pair_version_key in triage_settled):
                     continue
                 article = self.article(pmid, record_hash)
                 if not article.get("abstract") or not article["abstract"].strip():
@@ -915,14 +922,26 @@ class Store:
             if target is not None:
                 raise WaspError("--target requires an explicit PMID list")
             quota, mode = load(self.base / "context.json")["fulltext_quota"], "priority"
+        context_data = load(self.base / "context.json")
+        prioritized_concepts = set(context_data.get("concept_ids", []))
+        prioritized_drugs = {cid for cid in prioritized_concepts
+                             if isinstance(cid, str) and cid.startswith("drug/")}
+        tier0_concepts = {"phenotype/direct", "drug/nicotine"} | prioritized_drugs
         latest = {}
+        for row in self.table("triage"):
+            if row.get("policy", "raw") == "raw":
+                key = (row["gene"], row["concept_id"], row["pmid"], row["source_version"])
+                latest[key] = {
+                    "gene": row["gene"],
+                    "concept_id": row["concept_id"],
+                    "pmid": row["pmid"],
+                    "source_version": row["source_version"],
+                    "decision": row.get("effective_decision"),
+                    "phenotype_relevance": "direct" if row["concept_id"] in (tier0_concepts | prioritized_concepts) else "indirect",
+                }
         for evidence in self.table("evidence"):
             key = (evidence["gene"], evidence["concept_id"], evidence["pmid"], evidence["source_version"])
             latest[key] = evidence
-        context_data = load(self.base / "context.json")
-        prioritized_drugs = {cid for cid in context_data.get("concept_ids", [])
-                             if isinstance(cid, str) and cid.startswith("drug/")}
-        tier0_concepts = {"phenotype/direct", "drug/nicotine"} | prioritized_drugs
         priorities = {}
         for evidence in latest.values():
             pmid = evidence["pmid"]
@@ -1297,8 +1316,8 @@ class Store:
                 errors.append(str(error))
         return errors
 
-    def ingest_triage(self, captures, run_id, policy="never-hard-exclude"):
-        """Ingest Jev triage classifications for a retrieval run without excluding any record."""
+    def ingest_triage(self, captures, run_id, policy="raw"):
+        """Ingest Jev triage classifications for a retrieval run."""
         checked_run_id(run_id)
         run = load(self.base / "runs" / (run_id + ".json"))
         record_hashes = run.get("record_hashes", run.get("versions", {}))
@@ -1350,7 +1369,7 @@ class Store:
             "effective_decisions": dict(Counter(r["effective_decision"] for r in rows)),
             "raw_decisions": dict(Counter(r["raw_decision"] for r in rows)),
             "records": rows,
-            "note": "Triage prioritizes abstract screening order; it does not replace verbatim quotation validation.",
+            "note": "Jev triage screens gene-concept-PMID pairs directly; LLM subagent screening is only needed for unresolved needs_review items or when Jev is not used.",
         }
 
     def audit_triage(self):
@@ -1573,6 +1592,34 @@ class Store:
 
         evidence = self.table("evidence")
         latest_map = {}
+        for row in triage_rows:
+            if row.get("policy", "raw") == "raw":
+                reasons = []
+                if row.get("gene_identity") == "absent":
+                    reasons.append("gene absent")
+                elif row.get("gene_identity") == "ambiguous":
+                    reasons.append("ambiguous gene homonym")
+                if not row.get("concept_addressed"):
+                    reasons.append("concept not addressed")
+                if row.get("species_in_scope") == "no":
+                    reasons.append("species outside scope")
+                reason_text = "; ".join(reasons) if reasons else f"Jev {row.get('effective_decision')} (confidence={row.get('confidence')})"
+                latest_map[(row["gene"], row["concept_id"], row["pmid"], row["source_version"])] = {
+                    "pmid": row["pmid"],
+                    "gene": row["gene"],
+                    "concept_id": row["concept_id"],
+                    "source_version": row["source_version"],
+                    "decision": row.get("effective_decision"),
+                    "gene_identity": row.get("gene_identity"),
+                    "concept_support": "addressed" if row.get("concept_addressed") else "none",
+                    "species": row.get("species_in_scope"),
+                    "study_design": "Jev triage",
+                    "direction": None,
+                    "direction_target": None,
+                    "finding": f"Jev classification (confidence={row.get('confidence')})",
+                    "quotation": None,
+                    "reason": reason_text,
+                }
         for item in evidence:
             latest_map[(item["gene"], item["concept_id"], item["pmid"], item["source_version"])] = item
         latest_rows = sorted(latest_map.values(), key=lambda x: (x["gene"], x["concept_id"], int(x["pmid"])))
@@ -1783,8 +1830,13 @@ class Store:
 
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
-        articles, evidence = self.table("articles"), self.table("evidence")
+        articles, evidence, triage = self.table("articles"), self.table("evidence"), self.table("triage")
         latest = {}
+        for row in triage:
+            if row.get("policy", "raw") == "raw":
+                latest[(row["gene"], row["concept_id"], row["pmid"], row["source_version"])] = {
+                    "decision": row.get("effective_decision", "unassessed"),
+                }
         for item in evidence:
             latest[(item["gene"], item["concept_id"], item["pmid"], item["source_version"])] = item
         def coverage(run, query):
@@ -1812,11 +1864,13 @@ class Store:
                     "unretrieved_memberships": len(query["pmids"]) - len(query["selected_pmids"]),
                     "scope_screening_complete": query["coverage"] == "complete_count_reconciled" and not query["capped"]
                          and not missing and not missing_abstracts and not decisions["unassessed"] and not decisions["needs_review"]}
+        assessed_rows = evidence if (evidence or not latest) else list(latest.values())
         value = {"updated_at": now(), "article_count": len(articles),
                  "available_abstracts": sum(a["abstract_status"] == "available" for a in articles),
                  "missing_abstracts": sum(a["abstract_status"] == "missing" for a in articles),
                  "unique_discovered_pmids": len({m["pmid"] for m in self.table("membership")}),
-                 "assessment_records": len(evidence), "decision_counts": dict(Counter(e["decision"] for e in evidence)),
+                 "assessment_records": len(assessed_rows),
+                 "decision_counts": dict(Counter(e["decision"] for e in assessed_rows)),
                  "fulltext_count": len({f["pmid"] for f in self.table("fulltexts")}),
                  "association_pairs": len(self.table("associations")),
                  "association_evidence_records": len(self.table("association_evidence")),
@@ -1846,12 +1900,16 @@ class Store:
             record = self.article(pmid, article["source_version"])
             assessments = [e for e in self.table("evidence") if e["pmid"] == pmid
                            and (gene is None or e["gene"] == gene) and (concept_id is None or e["concept_id"] == concept_id)]
+            triage_rows = [t for t in self.table("triage") if t["pmid"] == pmid
+                           and (gene is None or t["gene"] == gene) and (concept_id is None or t["concept_id"] == concept_id)]
             current = [e for e in assessments if e["source_version"] == article["source_version"]]
+            current_triage = [t for t in triage_rows if t["source_version"] == article["source_version"]]
             historical_sources = {e["source_version"]: self.article(pmid, e["source_version"]) for e in assessments
                                   if e["source_version"] != article["source_version"]}
             records.append({"article": record, "source_version": article["source_version"],
                             "historical_assessment_sources": historical_sources,
-                            "assessments": assessments, "screening_status": "assessed" if current else "unassessed", 
+                            "assessments": assessments, "triage": triage_rows,
+                            "screening_status": "assessed" if (current or current_triage) else "unassessed",
                             "fulltexts": [f for f in self.table("fulltexts") if f["pmid"] == pmid]})
         concepts = {q["concept"]["id"]: q["concept"] for q in load(self.base / "queries.json")
                     if (gene is None or q["gene"] == gene)

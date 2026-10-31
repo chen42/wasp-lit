@@ -63,20 +63,22 @@ The coordinator dynamically imports the installed PubMed wrapper, so `uv` does n
 
 ## Screening
 
-Optional Jev triage can be run before generating packets to prioritize high-probability inclusions into earlier waves under the default `never-hard-exclude` policy:
+Run Jev structured classification (`wasp.py triage`) as the primary abstract screening step. Under the default `raw` policy, Jev screens every retrieved `gene × concept × PMID` pair and settles `include` and `exclude` decisions directly in `corpus/triage.jsonl`, `overview.json`, and `ai-decisions.md`:
 
 ```bash
 python3 "$SKILL/scripts/wasp.py" triage "$PROJECT" --run-id "$RUN"
 python3 "$SKILL/scripts/wasp.py" triage-report "$PROJECT" --run-id "$RUN"
 ```
 
-Generate screening packets and wave manifests:
+When Jev triage completes with 0 `needs_review` items, abstract screening is finished; do not run `wasp.py jobs` or launch `concept-screener` LLM subagent waves. Proceed directly to `wasp.py fulltext` and synthesis.
+
+If `TYPESAFE_API_KEY` is unavailable or Jev leaves unresolved `needs_review` pairs (such as ambiguous gene homonyms), generate screening packets and wave manifests for only the remaining unsettled pairs:
 
 ```bash
 python3 "$SKILL/scripts/wasp.py" jobs "$PROJECT" --run-id "$RUN"
 ```
 
-Read `jobs-index.json`. The command creates packets, portable JSON wave plans (`wave_json_paths`), and Pi workflow scripts (`wave_paths`), but launches no subagents. Follow `references/subagents.md` to execute an authorized wave asynchronously through Pi's `subagent` tool or your host harness's native subagent tool. Use runtime-provided output references and actual child run IDs.
+Read `jobs-index.json`. If `job_count` is `0`, no subagent screening is needed. Otherwise, the command creates packets, portable JSON wave plans (`wave_json_paths`), and Pi workflow scripts (`wave_paths`) for unsettled records. Follow `references/subagents.md` to execute an authorized wave asynchronously through Pi's `subagent` tool or your host harness's native subagent tool. Use runtime-provided output references and actual child run IDs.
 
 Pass `--model` to declare an explicit model for every screening worker in the generated waves:
 

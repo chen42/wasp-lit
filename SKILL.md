@@ -43,17 +43,17 @@ Save complete abstracts, raw XML responses, query translations, all discovered P
 
 Large searches require count-reconciled partitioning. Do not assume `retstart` can enumerate arbitrarily large PubMed result sets. If enumeration cannot reconcile all IDs, preserve the partial set and mark the stratum incomplete. Never report a failed search as zero evidence.
 
-## Coordinator and workers
+## Screening: Jev triage and fallback workers
 
-The host parent owns query planning, retrieval, deduplication, corpus writes, validation, synthesis and conversation continuity. Workers screen local sources only. Do not delegate retrieval or corpus writes.
+The host parent owns query planning, retrieval, deduplication, corpus writes, validation, synthesis and conversation continuity.
 
-Read [screening and synthesis](references/evidence-and-synthesis.md) and [subagent execution](references/subagents.md) before launching workers. In Pi, also read the installed `pi-subagents` skill; on other harnesses, use the host runtime's native subagent tool with the generated `jobs-index.json` or JSON wave plans. This skill's screening stage authorizes concept-screening delegation when the user requests its literature workflow. It does not authorize unrelated coding or review delegation.
+Run `wasp.py triage` (Jev structured classification) as the primary abstract screening step. Under the default `raw` policy, Jev screens every retrieved `gene × concept × PMID` pair for `gene_identity`, `concept_addressed`, `species_in_scope`, and `decision` (`include`, `exclude`, or `needs_review`). Once Jev has screened the pairs, `include` and `exclude` decisions are settled directly in `corpus/triage.jsonl`, `overview.json`, and `ai-decisions.md`, and there is no need for LLM `concept-screener` subagents to re-screen them. Proceed directly to `wasp.py fulltext` and synthesis unless unresolved `needs_review` items remain.
 
-Use `concept-screener`, fresh context, one gene and one concept per bounded packet. Check effective agent capabilities before execution. Preserve its read-only tools; do not pin a model in this skill. Group small packets into bounded workflow waves, not one worker per PMID. Parent launch authority and runtime fan-out limits still apply.
+Read [screening and synthesis](references/evidence-and-synthesis.md) and [subagent execution](references/subagents.md) only if `wasp.py jobs` generates pending packets (for example, when Jev flags an ambiguous gene homonym as `needs_review` or when `TYPESAFE_API_KEY` is unavailable). In Pi, read the installed `pi-subagents` skill; on other harnesses, use the host runtime's native subagent tool with the generated `jobs-index.json` or JSON wave plans.
 
-Read every assigned complete abstract. Lexical matching or optional `triage` classification can annotate or prioritize records, but cannot silently exclude them from scientific screening. Keep null, conflicting and ambiguous evidence. Unknown experimental details stay unknown. Require exact supporting quotations for inclusion and preserve direction targets so expression changes are not mistaken for behavioral effects.
+When subagent screening is needed for unresolved packets, use `concept-screener`, fresh context, one gene and one concept per bounded packet. Preserve its read-only tools; do not pin a model in this skill. Group small packets into bounded workflow waves, not one worker per PMID. Require exact supporting quotations for subagent inclusions and preserve direction targets so expression changes are not mistaken for behavioral effects.
 
-Persist worker outputs using runtime output bindings in Pi, or write and validate returned JSONL lines with `evidence-record` on harnesses that return worker responses in messages. Validate assigned versus returned PMIDs, summary counts, enums, record hashes and quotation fidelity before import. A worker failure is unresolved work, not exclusion. Scientific interpretation still needs parent review.
+Persist worker outputs using runtime output bindings in Pi, or write and validate returned JSONL lines with `evidence-record` on harnesses that return worker responses in messages. Validate assigned versus returned PMIDs, summary counts, enums, record hashes and quotation fidelity before import. A worker failure is unresolved work, not exclusion.
 
 ## Synthesis and follow-up
 
@@ -77,8 +77,8 @@ Resolve script paths relative to this skill directory. The [runbook](references/
 - `init`, `plan-search`: freeze approved context, ontology and exact queries in `corpus/`, and render `README.md`, `human-decisions.md`, and `ai-decisions.md` at the workspace root.
 - `human-decision`: record a user-approved scope change, concept-cap approval, or manual screening override in `corpus/human_decisions.jsonl` and refresh `human-decisions.md`.
 - `collect`: enumerate PMIDs and retrieve capped abstracts, resumably.
-- `triage`, `triage-report`: optional Jev structured classification to prioritize screening order under a never-hard-exclude policy, updating `ai-decisions.md`.
-- `jobs`: generate complete worker packets, portable JSON wave plans, and Pi workflow scripts; it launches nothing.
+- `triage`, `triage-report`: Jev structured classification to screen all retrieved `gene × concept × PMID` pairs under the default `raw` policy (`include`, `exclude`, `needs_review`), updating `overview.json` and `ai-decisions.md`.
+- `jobs`: generate worker packets, portable JSON wave plans, and Pi workflow scripts only for unscreened or `needs_review` pairs not already settled by Jev; it launches nothing.
 - `evidence-validate`, `evidence-import`, `evidence-record`: validate and retain screening output with its actual runtime run ID, automatically refreshing the subagent screening ledger in `ai-decisions.md`.
 - `packet`, `status`: reopen sources and coverage without a new search.
 - `fulltext`: retain accessible BioC texts with verified identity, respecting the run quota.

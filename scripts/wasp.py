@@ -211,8 +211,8 @@ def parser():
             command.add_argument("--run-id", required=True)
             command.add_argument("--capture", action="append",
                                  help="Saved Jev classification capture file; omit to classify live via HTTP")
-            command.add_argument("--policy", choices=TRIAGE_POLICIES, default="never-hard-exclude",
-                                 help="Triage policy (default: never-hard-exclude, which reroutes exclusions to needs_review)")
+            command.add_argument("--policy", choices=TRIAGE_POLICIES, default="raw",
+                                 help="Triage policy (default: raw, keeping Jev include/exclude/needs_review decisions directly; never-hard-exclude reroutes exclusions to needs_review)")
             command.add_argument("--endpoint", help="Override the Jev classification API URL (default: https://api.typesafe.ai/v1/systemone)")
             command.add_argument("--model", help="Override the Jev model identifier (default: typesafe/jev-latest)")
             command.add_argument("--workers", type=int, default=DEFAULT_TRIAGE_WORKERS,

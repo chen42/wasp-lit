@@ -28,7 +28,7 @@ A paper wasp builds its nest one cell at a time and returns to extend the same s
 1. Collect NCBI Gene and WikiGenes function context for each gene and prioritize concepts.
 2. Freeze the context and query plan (`init`, `plan-search`).
 3. Enumerate PMIDs and retrieve capped abstracts (`collect`).
-4. Generate bounded screening jobs for `concept-screener` subagents (`jobs`), then validate and import results (`evidence-validate`, `evidence-import`).
+4. Screen retrieved abstracts with Jev structured classification (`triage`, `triage-report`); generate bounded `concept-screener` subagent jobs (`jobs`) only if unresolved `needs_review` items remain or Jev is unavailable.
 5. Run the GWAS Catalog lane (`phenotype-search`, `associations`) and retrieve accessible full texts within the run quota (`fulltext`).
 6. Write a PMID-cited candidate-plausibility synthesis that keeps association, perturbation, mechanism, and species transfer distinct.
 7. Reopen the saved sources in later conversations (`packet`, `status`).

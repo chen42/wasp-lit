@@ -272,6 +272,38 @@ class CrossHarnessStoreAndCliTests(unittest.TestCase):
         self.store.save_table("triage", rows)
         self.assertFalse(self.store.audit()["ok"])
 
+    def test_default_raw_triage_settles_screening_without_llm_jobs(self):
+        hashes = self.run["record_hashes"]
+        rows = []
+        for search in self.run["searches"].values():
+            for pmid in search["selected_pmids"]:
+                if not hashes.get(pmid):
+                    continue
+                is_inc = pmid in ("900000001", "900000002")
+                rows.append({
+                    "pmid": pmid,
+                    "gene": search["gene"],
+                    "concept_id": search["concept"]["id"],
+                    "source_version": hashes[pmid],
+                    "gene_identity": "confirmed",
+                    "concept_addressed": is_inc,
+                    "species_in_scope": "yes",
+                    "decision": "include" if is_inc else "exclude",
+                    "confidence": 0.95,
+                })
+        summary = self.store.ingest_triage([{"name": "triage-raw.json", "payload": {"classifications": rows}}], "offline-test")
+        self.assertEqual(summary["policy"], "raw")
+        self.assertEqual(summary["rerouted_exclusions"], 0)
+        jobs = self.store.jobs("offline-test")
+        self.assertEqual(jobs["job_count"], 0)
+        overview = self.store.overview()
+        self.assertEqual(overview["assessment_records"], len(rows))
+        self.assertIn("include", overview["decision_counts"])
+        self.assertIn("exclude", overview["decision_counts"])
+        ft = self.store.fulltext(self.backend, "offline-test")
+        self.assertGreaterEqual(ft["retrieved"], 1)
+        self.assertTrue(self.store.audit()["ok"], self.store.audit()["errors"])
+
     def test_jobs_writes_portable_json_wave_plans_and_enriched_index(self):
         jobs = self.store.jobs("offline-test", batch_size=2, dispatch_size=1)
         self.assertEqual(len(jobs["wave_json_paths"]), len(jobs["wave_paths"]))

@@ -43,7 +43,7 @@ Keep `agents/concept-screener.md` canonical. The runbook gives a user-agent upda
 
 ## Jobs and waves
 
-`scripts/wasp.py jobs` creates complete JSONL packets and immutable job manifests, one gene and one concept per job. Default packet size is at most 20 abstracts and 40,000 UTF-8 bytes. No lexical prefilter or triage classifier automatically excludes records. If `wasp.py triage` was run beforehand, `jobs` orders triage-included records into earlier packets so high-probability evidence is screened first while retaining every record. An oversized record needs a separate source-aware read.
+`scripts/wasp.py jobs` creates complete JSONL packets and immutable job manifests, one gene and one concept per job, for any record not already settled by Jev triage (`wasp.py triage`) or prior subagent assessments. Default packet size is at most 20 abstracts and 40,000 UTF-8 bytes. When `wasp.py triage` has been run under the default `raw` policy, pairs with `include` or `exclude` decisions are settled and skipped by `jobs`, so packets are generated only for remaining `needs_review` or unscreened pairs (returning `job_count: 0` when all pairs are settled). If `--policy never-hard-exclude` was explicitly used during triage, `jobs` retains all records and orders triage-included records into earlier packets. An oversized record needs a separate source-aware read.
 
 The command writes both Pi JavaScript workflow scripts (`.js`, with explicit child `output` bindings and `outputMode:"file-only"`) and portable JSON wave plans (`.json`, listed under `wave_json_paths` in `jobs-index.json`). It does not invoke Pi or launch models. Default wave size is 64 jobs; the CLI permits at most 128. Each wave dispatches awaited groups of at most 6 workers by default, stopping further dispatch after a failed group. `--dispatch-size` changes group size separately from packet size and wave fan-out. Inspect configured group, cumulative run fan-out and session limits before launch; lower these sizes when necessary. Context batching is separate from scientific retrieval caps.
 
@@ -69,7 +69,7 @@ Consume completed wave results before importing or synthesizing. Read the actual
 
 On harnesses without `pi-subagents` (such as Antigravity, Claude Code, Codex, or OpenCode):
 
-1. Read `references/wasp/jobs-index.json` or the portable wave file in `wave_json_paths`. Each entry in `jobs` provides `job_id`, `path` (the canonical `job.json`), `packet_path`, `expected_output_path`, `rubric_path`, and the exact `task` prompt.
+1. Read `corpus/jobs-index.json` or the portable wave file in `wave_json_paths`. Each entry in `jobs` provides `job_id`, `path` (the canonical `job.json`), `packet_path`, `expected_output_path`, `rubric_path`, and the exact `task` prompt.
 2. Dispatch fresh-context, read-only subagents in bounded groups (up to `dispatch_size`, 6 by default) using the host harness's native subagent tool and the system prompt in `agents/concept-screener.md`.
 3. When a subagent completes and returns its JSONL assessment lines, persist, validate, and import the output with `evidence-record`:
 
@@ -81,9 +81,9 @@ python3 "$SKILL/scripts/wasp.py" evidence-record "$PROJECT" \
 
 Or pipe the worker's raw JSONL text on standard input with `--stdin`.
 
-## Optional Jev triage pre-prioritization
+## Jev triage as primary abstract screening
 
-`scripts/jev_classifier.py` and `wasp.py triage` provide a pure-Python structured classification step for `typesafe/jev-latest` (or saved classification captures) that does not depend on Pi's `codemode` `models.classify` binding. Under the default `never-hard-exclude` policy, classifier exclusions are rerouted to `needs_review` and never dropped from `jobs`. Because a typed classifier does not extract free-form findings or verbatim quotations, `concept-screener` validation remains required for every included record.
+`scripts/jev_classifier.py` and `wasp.py triage` provide a pure-Python structured classification step for `typesafe/jev-latest` (or saved classification captures) that does not depend on Pi's `codemode` `models.classify` binding. Under the default `raw` policy, Jev settles `include` and `exclude` decisions directly in `corpus/triage.jsonl`, `overview.json`, and `ai-decisions.md`, and `wasp.py fulltext` selects full-text candidates directly from Jev-included records. Do not run `concept-screener` LLM subagent waves over pairs already settled by Jev; use `concept-screener` only if `wasp.py jobs` reports pending `needs_review` or unscreened pairs (or if `--policy never-hard-exclude` was explicitly requested).
 
 ## Resume and failure
 

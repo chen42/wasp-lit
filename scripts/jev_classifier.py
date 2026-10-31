@@ -5,11 +5,11 @@ Other agent harnesses do not provide that JavaScript sandbox binding. This
 module provides an equivalent pure-Python HTTP client and offline capture
 validator so structured abstract triage works identically across all harnesses.
 
-Because a typed classifier returns label probabilities without free-form
-findings or verbatim supporting quotations, it cannot replace the canonical
-`concept-screener` evidence contract. Under the default `never-hard-exclude`
-policy, classifier exclusions are rerouted to `needs_review` so no relevant
-paper is silently dropped before abstract screening.
+By default (`--policy raw`), Jev's structured classification (`include`,
+`exclude`, `needs_review`) settles abstract screening directly, so LLM
+`concept-screener` subagents only need to run on unresolved `needs_review`
+records (or when Jev is not used). Passing `--policy never-hard-exclude`
+reroutes Jev exclusions to `needs_review` for pre-prioritized subagent waves.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -30,7 +30,7 @@ DEFAULT_TIMEOUT = 60
 DEFAULT_RETRIES = 2
 DEFAULT_TRIAGE_WORKERS = 16
 MAX_TRIAGE_WORKERS = 32
-TRIAGE_POLICIES = ("never-hard-exclude", "raw")
+TRIAGE_POLICIES = ("raw", "never-hard-exclude")
 GENE_IDENTITY_VALUES = ("confirmed", "ambiguous", "absent")
 DECISION_VALUES = ("include", "exclude", "needs_review")
 
@@ -220,7 +220,7 @@ def redact_jev_error(value):
     return re.sub(r"(?i)(bearer\s+|api[_-]?key=|token=)([^\s&\"']+)", r"\1<redacted>", text)
 
 
-def normalize_triage_row(raw, policy="never-hard-exclude"):
+def normalize_triage_row(raw, policy="raw"):
     """Validate and normalize one Jev classification result."""
     if policy not in TRIAGE_POLICIES:
         raise JevCaptureError("Unsupported triage policy: " + repr(policy))

@@ -20,9 +20,9 @@ Fetch selected records in batches. Preserve raw XML and the complete parsed abst
 
 ## Screen
 
-Generate bounded packets, with one gene and one concept per job. Every available selected abstract is assigned; missing abstracts remain explicitly unscreened. Packet boundaries limit context size without truncating sources. Generated workflow waves contain at most 64 jobs by default, dispatched in awaited groups of 6. These limits are independent of API request and abstract-packet batching.
+Run `wasp.py triage` (Jev structured classification) across all retrieved `gene × concept × PMID` pairs. Under the default `raw` policy, Jev settles `include` and `exclude` decisions directly in `corpus/triage.jsonl`, `overview.json`, and `ai-decisions.md`. When `needs_review` is 0, abstract screening is complete; do not launch `concept-screener` LLM subagents over pairs already settled by Jev.
 
-The host parent explicitly launches the screening wave through `pi-subagents` in Pi or through the host harness's native subagent tool using `jobs-index.json` and the generated `.json` wave plans. Workers read sources, return JSONL assessments, and never edit the corpus. Import only outputs that pass source-version, PMID-completeness, summary and quotation checks. Review scientific interpretation separately; deterministic validation cannot establish that a quotation supports a finding.
+If `TYPESAFE_API_KEY` is unavailable or Jev flags unresolved homonyms (`needs_review`), run `wasp.py jobs` to generate bounded packets for only the remaining unsettled pairs, with one gene and one concept per job. Missing abstracts remain explicitly unscreened. When pending jobs exist, the host parent dispatches `concept-screener` workers through `pi-subagents` in Pi or through the host harness's native subagent tool using `jobs-index.json` and the generated `.json` wave plans. Workers read sources, return JSONL assessments, and never edit the corpus.
 
 ## Retrieve full text and synthesize
 

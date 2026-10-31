@@ -141,7 +141,7 @@ def parser():
     command.add_argument("--agent-path", default=None,
                          help="Optional installed agent copy path (defaults to ~/.pi/agent/agents/concept-screener.md when present, otherwise canonical)")
     for name in ("init", "plan-search", "collect", "jobs", "evidence-validate", "evidence-import",
-                 "evidence-record", "triage", "triage-report", "human-decision", "packet", "fulltext", "audit",
+                 "evidence-record", "triage", "triage-report", "human-decision", "user-decision", "packet", "fulltext", "audit",
                  "status", "acknowledge-license", "phenotype-search", "associations", "association-report", "render-html"):
         command = commands.add_parser(name)
         command.add_argument("workspace")
@@ -222,10 +222,10 @@ def parser():
         if name == "triage-report":
             command.add_argument("--run-id")
             command.add_argument("--output")
-        if name == "human-decision":
+        if name in ("human-decision", "user-decision"):
             command.add_argument("--stage", required=True, help="Workflow stage (e.g., scope_approval, concept_prioritization, screening_override)")
-            command.add_argument("--decision", required=True, help="Summary of the human decision or approval")
-            command.add_argument("--rationale", help="Optional rationale or notes provided by the human user")
+            command.add_argument("--decision", required=True, help="Summary of the user decision or approval")
+            command.add_argument("--rationale", help="Optional rationale or notes provided by the user")
             command.add_argument("--pmids", help="Optional comma-separated PMIDs affected by this decision")
         if name == "packet":
             command.add_argument("--pmids", help="Comma-separated, verified PMIDs")
@@ -423,10 +423,11 @@ def main(argv=None):
                     raise WaspError("Choose a new triage report output path")
                 atomic(args.output, value)
             return value
-        if args.command == "human-decision":
+        if args.command in ("human-decision", "user-decision"):
             pmids = args.pmids.split(",") if args.pmids else []
             entry = store.log_human_decision(args.stage, args.decision, args.rationale, pmids)
             return {"decision_id": entry["decision_id"], "stage": entry["stage"],
+                    "user_decisions_md": str(store.root / "user-decisions.md"),
                     "human_decisions_md": str(store.root / "human-decisions.md")}
         if args.command == "packet":
             if Path(args.output).exists():

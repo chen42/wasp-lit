@@ -15,28 +15,28 @@ import markdown
 
 SOURCECERY_NORD_CSS = """
 :root {
-  /* Nord Dark Theme Palette */
-  --bg-color: #2e3440;
-  --panel-bg-color: #3b4252;
-  --card-bg-color: #383f4f;
-  --text-color: #d8dee9;
-  --text-muted: #9aa5b5;
-  --header-color: #eceff4;
-  --border-color: #4c566a;
-  --border-light: #434c5e;
-  --control-bg-color: #434c5e;
+  /* High-Contrast Dark Theme Palette */
+  --bg-color: #14171d;
+  --panel-bg-color: #1d212a;
+  --card-bg-color: #1d212a;
+  --text-color: #ebcb8b;
+  --text-muted: #c5b89a;
+  --header-color: #f8f8f2;
+  --border-color: #3b4252;
+  --border-light: #2a303c;
+  --control-bg-color: #2e3440;
   --accent-color: #88c0d0;
-  --accent-hover-color: #81a1c1;
-  --accent-bg-color: rgba(136, 192, 208, 0.12);
-  --accent-bg-hover-color: rgba(136, 192, 208, 0.24);
-  --authoryear-color: #e5e9f0;
-  --authoryear-bg-color: #434c5e;
-  --code-bg: #242933;
-  --table-stripe: #343b49;
-  --badge-bg: #434c5e;
-  --badge-text: #eceff4;
-  --shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  --tooltip-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  --accent-hover-color: #a3e8ff;
+  --accent-bg-color: rgba(136, 192, 208, 0.14);
+  --accent-bg-hover-color: rgba(136, 192, 208, 0.28);
+  --authoryear-color: #d8dee9;
+  --authoryear-bg-color: #2e3440;
+  --code-bg: #101217;
+  --table-stripe: #232833;
+  --badge-bg: #2e3440;
+  --badge-text: #ebcb8b;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+  --tooltip-shadow: 0 12px 36px rgba(0, 0, 0, 0.85);
 }
 
 * {
@@ -127,10 +127,10 @@ body {
 }
 
 .content-card {
-  background-color: var(--panel-bg-color);
+  background-color: var(--card-bg-color);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 36px 40px;
+  border-radius: 10px;
+  padding: 40px 48px;
   box-shadow: var(--shadow);
 }
 
@@ -177,7 +177,7 @@ li {
 }
 
 strong {
-  color: var(--header-color);
+  color: #fff9e6;
   font-weight: 600;
 }
 
@@ -189,7 +189,7 @@ a {
 }
 
 a:hover {
-  color: #eceff4;
+  color: #ffffff;
   text-decoration: underline;
 }
 
@@ -291,25 +291,25 @@ hr {
 #tooltip {
   display: none;
   position: absolute;
-  background-color: var(--panel-bg-color);
+  background-color: #171b22;
   border: 1px solid var(--accent-color);
   border-radius: 8px;
   box-shadow: var(--tooltip-shadow);
   padding: 18px 20px;
   z-index: 10000;
   pointer-events: none;
-  line-height: 1.5;
+  line-height: 1.55;
   color: var(--text-color);
-  max-width: 520px;
+  max-width: 540px;
   font-size: 13.5px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(6px);
   transition: opacity 0.15s ease;
 }
 
 #tooltip .pmid-badge {
   display: inline-block;
   background-color: var(--accent-color);
-  color: #2e3440;
+  color: #14171d;
   font-size: 0.75em;
   font-weight: 700;
   padding: 2px 6px;
@@ -320,7 +320,7 @@ hr {
 
 #tooltip .title {
   font-weight: 700;
-  color: var(--header-color);
+  color: #ffffff;
   margin-bottom: 6px;
   font-size: 1.05em;
   line-height: 1.35;
@@ -599,7 +599,7 @@ def extract_pubmed_cache_from_corpus(corpus_dir, extra_pmids=None):
 NAV_PAGES = [
     ("synthesis", "synthesis.html", "Synthesis"),
     ("gene-function", "gene-function.html", "Gene Function"),
-    ("human-decisions", "human-decisions.html", "Human Decisions"),
+    ("user-decisions", "user-decisions.html", "User Decisions"),
     ("ai-decisions", "ai-decisions.html", "AI Decisions"),
     ("gwas-associations", "gwas-associations.html", "GWAS Associations"),
     ("README", "README.html", "Overview"),
@@ -662,11 +662,14 @@ def process_markdown_file(md_path, workspace_dir, gene_symbol, pmid_cache):
     raw_html = markdown.markdown(md_text, extensions=["tables", "fenced_code"])
     soup = BeautifulSoup(raw_html, "html.parser")
 
-    # 1. Rewrite internal .md links to .html
+    # 1. Rewrite internal .md links to .html (and human-decisions to user-decisions)
     for a in soup.find_all("a", href=True):
         href = a["href"]
+        if "human-decisions" in href:
+            href = href.replace("human-decisions", "user-decisions")
         if href.endswith(".md") or ".md#" in href:
-            a["href"] = re.sub(r"\.md(\b|#)", r".html\1", href)
+            href = re.sub(r"\.md(\b|#)", r".html\1", href)
+        a["href"] = href
 
     # 2. Tag existing PubMed links with class="pmid-link" and data-pmid
     for a in soup.find_all("a", href=True):
@@ -756,9 +759,17 @@ def render_workspace_html(workspace_path):
     # Render all standard workspace deliverable files
     for key, filename, _ in NAV_PAGES:
         md_file = ws / (key + ".md")
+        if not md_file.exists() and key == "user-decisions":
+            fallback = ws / "human-decisions.md"
+            if fallback.exists():
+                md_file = fallback
         if md_file.exists():
             out_file = process_markdown_file(md_file, ws, gene_symbol, pmid_cache)
             generated.append(str(out_file))
+            if md_file.name == "human-decisions.md":
+                user_html = ws / "user-decisions.html"
+                user_html.write_text(out_file.read_text(encoding="utf-8"), encoding="utf-8")
+                generated.append(str(user_html))
 
     return {
         "workspace": str(ws),

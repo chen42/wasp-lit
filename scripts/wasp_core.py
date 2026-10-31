@@ -1478,11 +1478,12 @@ class Store:
         if not (self.base / "context.json").exists():
             return
         context = load(self.base / "context.json")
-        path = self.root / "human-decisions.md"
+        path = self.root / "user-decisions.md"
+        legacy_path = self.root / "human-decisions.md"
         notes = _preserved_block(
-            path,
-            "<!-- HUMAN-NOTES-START -->",
-            "<!-- HUMAN-NOTES-END -->",
+            path if path.exists() else legacy_path,
+            "<!-- USER-NOTES-START -->",
+            "<!-- USER-NOTES-END -->",
             "Add manual review notes or scope clarifications here.",
         )
         genes_lines = []
@@ -1513,9 +1514,9 @@ class Store:
         rel_context = self.rel(self.base / "context.json")
         rel_human_jsonl = self.rel(self.base / "human_decisions.jsonl")
         content = "\n".join([
-            "# Human Decisions and Approved Scope",
+            "# User Decisions and Approved Scope",
             "",
-            "This file records scope parameters, concept-cap approvals, and manual overrides approved by the human user. "
+            "This file records scope parameters, concept-cap approvals, and manual overrides approved by the user. "
             "Automated subagent screening and Jev triage classifications are logged separately in the "
             "[AI decision and screening log](./ai-decisions.md).",
             "",
@@ -1539,20 +1540,25 @@ class Store:
                 if priority_concepts else ["- None specified"]
             ),
             "",
-            "## Human Approval and Override Ledger",
+            "## User Approval and Override Ledger",
             "",
             f"Machine provenance table: [human decisions JSONL](./{rel_human_jsonl})",
             "",
             *ledger_lines,
             "",
-            "## Human Notes",
+            "## User Notes",
             "",
-            "<!-- HUMAN-NOTES-START -->",
+            "<!-- USER-NOTES-START -->",
             notes,
-            "<!-- HUMAN-NOTES-END -->",
+            "<!-- USER-NOTES-END -->",
             "",
         ])
         path.write_text(content, encoding="utf-8")
+        legacy_path.write_text(content, encoding="utf-8")
+
+    def render_user_decisions(self):
+        """Alias for render_human_decisions."""
+        return self.render_human_decisions()
 
     def render_ai_decisions(self, overview_data=None):
         """Render top-level ai-decisions.md with AI concept rationale, Jev triage summary, and per-PMID subagent screening tables."""
@@ -1701,8 +1707,8 @@ class Store:
             "# AI Coordinator and Subagent Screening Decisions",
             "",
             "This file records decisions made by the AI coordinator, Jev pre-screening classifier, and read-only "
-            "concept-screening subagents. Scope approvals and overrides made by the human user are logged separately "
-            "in the [human decision log](./human-decisions.md).",
+            "concept-screening subagents. Scope approvals and overrides made by the user are logged separately "
+            "in the [User decision log](./user-decisions.md).",
             "",
             "## AI Concept-Domain Prioritization Rationale",
             "",
@@ -1827,7 +1833,7 @@ class Store:
             "## Top-Level Human-Readable Documents",
             "",
             "- [Evidence synthesis](./synthesis.md): Narrative synthesis integrating baseline gene biology, GWAS associations, and screened PubMed evidence.",
-            "- [Human decision log](./human-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
+            "- [User decision log](./user-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
             "- [AI decision and screening log](./ai-decisions.md): AI concept-prioritization rationale, Jev triage summary, and per-PMID subagent screening tables.",
             "- [Baseline gene function summary](./gene-function.md): Baseline molecular, expression, and structural context.",
             "- [GWAS association summary](./gwas-associations.md): Human GWAS Catalog variant and trait summary (when GWAS enrichment is run).",

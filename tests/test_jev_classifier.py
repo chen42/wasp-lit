@@ -140,16 +140,15 @@ class JevUnitTests(unittest.TestCase):
             self.assertNotIn("secret-token-123", redacted)
             self.assertIn("<redacted>", redacted)
 
-    def test_resolve_jev_config_defaults_to_typesafe_systemone_and_reads_dotenv(self):
+    def test_resolve_jev_config_uses_hardcoded_typesafe_systemone_url_and_reads_dotenv_key(self):
         with tempfile.TemporaryDirectory() as fake_home:
             env_file = Path(fake_home) / ".env"
-            with patch.dict(os.environ, {"WASP_JEV_API_URL": "", "TYPESAFE_CLASSIFY_URL": "",
-                                         "WASP_JEV_API_KEY": "", "TYPESAFE_API_KEY": ""}, clear=False):
+            with patch.dict(os.environ, {"WASP_JEV_API_KEY": "", "TYPESAFE_API_KEY": ""}, clear=False):
                 with self.assertRaises(JevError):
                     resolve_jev_config(env_path=env_file)
             env_file.write_text('TYPESAFE_API_KEY=dotenv-secret\n', encoding="utf-8")
             with patch.dict(os.environ, {}, clear=False):
-                for k in ("WASP_JEV_API_URL", "TYPESAFE_CLASSIFY_URL", "WASP_JEV_API_KEY", "TYPESAFE_API_KEY"):
+                for k in ("WASP_JEV_API_KEY", "TYPESAFE_API_KEY"):
                     os.environ.pop(k, None)
                 cfg = resolve_jev_config(env_path=env_file)
                 self.assertEqual(cfg["url"], DEFAULT_JEV_URL)
@@ -157,15 +156,6 @@ class JevUnitTests(unittest.TestCase):
                 self.assertEqual(cfg["model"], DEFAULT_JEV_MODEL)
                 cfg_base = resolve_jev_config(explicit_url="https://api.typesafe.ai/v1/", env_path=env_file)
                 self.assertEqual(cfg_base["url"], DEFAULT_JEV_URL)
-            env_file.write_text('WASP_JEV_API_URL="https://dotenv.invalid/v1"\nTYPESAFE_API_KEY=dotenv-secret\n',
-                                encoding="utf-8")
-            with patch.dict(os.environ, {}, clear=False):
-                for k in ("WASP_JEV_API_URL", "TYPESAFE_CLASSIFY_URL", "WASP_JEV_API_KEY", "TYPESAFE_API_KEY"):
-                    os.environ.pop(k, None)
-                cfg = resolve_jev_config(env_path=env_file)
-                self.assertEqual(cfg["url"], "https://dotenv.invalid/v1")
-                self.assertEqual(cfg["api_key"], "dotenv-secret")
-                self.assertEqual(cfg["model"], DEFAULT_JEV_MODEL)
 
 
 class CrossHarnessStoreAndCliTests(unittest.TestCase):

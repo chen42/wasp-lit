@@ -171,7 +171,7 @@ def _normalize_jev_url(url):
 
 
 def resolve_jev_config(explicit_url=None, model=None, env_path=None):
-    """Resolve the Jev classification endpoint URL, API key, and model from os.environ or ~/.env."""
+    """Resolve the built-in Jev classification endpoint URL, API key from os.environ or ~/.env, and model."""
     dotenv_vals = _load_dotenv_fallback(env_path)
     def get_var(name):
         val = os.environ.get(name)
@@ -179,12 +179,11 @@ def resolve_jev_config(explicit_url=None, model=None, env_path=None):
             return val
         return dotenv_vals.get(name)
 
-    raw_url = explicit_url or get_var("WASP_JEV_API_URL") or get_var("TYPESAFE_CLASSIFY_URL") or DEFAULT_JEV_URL
-    url = _normalize_jev_url(raw_url)
-    key = get_var("WASP_JEV_API_KEY") or get_var("TYPESAFE_API_KEY")
+    url = _normalize_jev_url(explicit_url or DEFAULT_JEV_URL)
+    key = get_var("TYPESAFE_API_KEY") or get_var("WASP_JEV_API_KEY")
     resolved_model = (model or get_var("WASP_JEV_MODEL") or DEFAULT_JEV_MODEL).strip()
     if not key:
-        raise JevError("Safe credential setup required for WASP_JEV_API_KEY or TYPESAFE_API_KEY in ~/.env; "
+        raise JevError("Safe credential setup required for TYPESAFE_API_KEY in ~/.env; "
                        "add locally using hidden terminal input, never in chat")
     return {"url": url, "api_key": key, "model": resolved_model}
 

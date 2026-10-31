@@ -137,16 +137,22 @@ class JevUnitTests(unittest.TestCase):
             self.assertNotIn("secret-token-123", redacted)
             self.assertIn("<redacted>", redacted)
 
-    def test_resolve_jev_config_requires_url_and_key(self):
-        with patch.dict(os.environ, {"WASP_JEV_API_URL": "", "TYPESAFE_CLASSIFY_URL": "",
-                                     "WASP_JEV_API_KEY": "", "TYPESAFE_API_KEY": ""}, clear=False):
-            with self.assertRaises(JevError):
-                resolve_jev_config()
-        with patch.dict(os.environ, {"WASP_JEV_API_URL": "https://jev.invalid/v1",
-                                     "WASP_JEV_API_KEY": "synthetic-key"}, clear=False):
-            cfg = resolve_jev_config()
-            self.assertEqual(cfg["url"], "https://jev.invalid/v1")
-            self.assertEqual(cfg["model"], DEFAULT_JEV_MODEL)
+    def test_resolve_jev_config_requires_url_and_key_and_reads_dotenv(self):
+        with tempfile.TemporaryDirectory() as fake_home:
+            env_file = Path(fake_home) / ".env"
+            with patch.dict(os.environ, {"WASP_JEV_API_URL": "", "TYPESAFE_CLASSIFY_URL": "",
+                                         "WASP_JEV_API_KEY": "", "TYPESAFE_API_KEY": ""}, clear=False):
+                with self.assertRaises(JevError):
+                    resolve_jev_config(env_path=env_file)
+            env_file.write_text('WASP_JEV_API_URL="https://dotenv.invalid/v1"\nTYPESAFE_API_KEY=dotenv-secret\n',
+                                encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=False):
+                for k in ("WASP_JEV_API_URL", "TYPESAFE_CLASSIFY_URL", "WASP_JEV_API_KEY", "TYPESAFE_API_KEY"):
+                    os.environ.pop(k, None)
+                cfg = resolve_jev_config(env_path=env_file)
+                self.assertEqual(cfg["url"], "https://dotenv.invalid/v1")
+                self.assertEqual(cfg["api_key"], "dotenv-secret")
+                self.assertEqual(cfg["model"], DEFAULT_JEV_MODEL)
 
 
 class CrossHarnessStoreAndCliTests(unittest.TestCase):

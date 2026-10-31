@@ -121,13 +121,45 @@ def build_questions():
     ]
 
 
-def resolve_jev_config(explicit_url=None, model=None):
-    """Resolve the Jev classification endpoint URL, API key, and model."""
-    url = explicit_url or os.environ.get("WASP_JEV_API_URL") or os.environ.get("TYPESAFE_CLASSIFY_URL")
-    key = os.environ.get("WASP_JEV_API_KEY") or os.environ.get("TYPESAFE_API_KEY")
-    resolved_model = (model or os.environ.get("WASP_JEV_MODEL") or DEFAULT_JEV_MODEL).strip()
+def _load_dotenv_fallback(env_path=None):
+    """Read key=value pairs from ~/.env using stdlib without overwriting existing env vars."""
+    path = Path(env_path) if env_path else (Path.home() / ".env")
+    if not path.is_file():
+        return {}
+    values = {}
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#") or "=" not in stripped:
+                continue
+            if stripped.startswith("export "):
+                stripped = stripped[7:].strip()
+            key, val = stripped.split("=", 1)
+            key = key.strip()
+            val = val.strip()
+            if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+                val = val[1:-1]
+            if key:
+                values[key] = val
+    except OSError:
+        return {}
+    return values
+
+
+def resolve_jev_config(explicit_url=None, model=None, env_path=None):
+    """Resolve the Jev classification endpoint URL, API key, and model from os.environ or ~/.env."""
+    dotenv_vals = _load_dotenv_fallback(env_path)
+    def get_var(name):
+        val = os.environ.get(name)
+        if val is not None:
+            return val
+        return dotenv_vals.get(name)
+
+    url = explicit_url or get_var("WASP_JEV_API_URL") or get_var("TYPESAFE_CLASSIFY_URL")
+    key = get_var("WASP_JEV_API_KEY") or get_var("TYPESAFE_API_KEY")
+    resolved_model = (model or get_var("WASP_JEV_MODEL") or DEFAULT_JEV_MODEL).strip()
     if not url:
-        raise JevError("No Jev classification URL configured. Set WASP_JEV_API_URL, pass --endpoint, "
+        raise JevError("No Jev classification URL configured. Set WASP_JEV_API_URL in ~/.env, pass --endpoint, "
                        "or supply saved triage captures with --capture")
     if not key:
         raise JevError("Safe credential setup required for WASP_JEV_API_KEY or TYPESAFE_API_KEY in ~/.env; "

@@ -67,10 +67,10 @@ class RenderHtmlTests(unittest.TestCase):
         html_content = (self.workspace / "synthesis.html").read_text(encoding="utf-8")
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # 1. Check high-contrast dark theme CSS variables with light yellow font
+        # 1. Check high-contrast dark theme CSS variables with warm ivory (yellow-tinted white) font
         self.assertIn("--bg-color: #14171d;", html_content)
         self.assertIn("--panel-bg-color: #1d212a;", html_content)
-        self.assertIn("--text-color: #ebcb8b;", html_content)
+        self.assertIn("--text-color: #faf4e6;", html_content)
 
         # 2. Check tooltip container
         self.assertIsNotNone(soup.find("div", id="tooltip"))

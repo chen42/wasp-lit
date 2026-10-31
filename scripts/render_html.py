@@ -19,9 +19,9 @@ SOURCECERY_NORD_CSS = """
   --bg-color: #14171d;
   --panel-bg-color: #1d212a;
   --card-bg-color: #1d212a;
-  --text-color: #ebcb8b;
-  --text-muted: #c5b89a;
-  --header-color: #f8f8f2;
+  --text-color: #faf4e6;
+  --text-muted: #c8c0b0;
+  --header-color: #ffffff;
   --border-color: #3b4252;
   --border-light: #2a303c;
   --control-bg-color: #2e3440;
@@ -34,7 +34,7 @@ SOURCECERY_NORD_CSS = """
   --code-bg: #101217;
   --table-stripe: #232833;
   --badge-bg: #2e3440;
-  --badge-text: #ebcb8b;
+  --badge-text: #faf4e6;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
   --tooltip-shadow: 0 12px 36px rgba(0, 0, 0, 0.85);
 }

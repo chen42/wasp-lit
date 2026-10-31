@@ -13,19 +13,23 @@ paper is silently dropped before abstract screening.
 """
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import http.client
 import json
 import os
 from pathlib import Path
 import re
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_JEV_URL = "https://api.typesafe.ai/v1/systemone"
 DEFAULT_JEV_MODEL = "typesafe/jev-latest"
 DEFAULT_TIMEOUT = 60
 DEFAULT_RETRIES = 2
-DEFAULT_TRIAGE_WORKERS = 8
+DEFAULT_TRIAGE_WORKERS = 16
+MAX_TRIAGE_WORKERS = 32
 TRIAGE_POLICIES = ("never-hard-exclude", "raw")
 GENE_IDENTITY_VALUES = ("confirmed", "ambiguous", "absent")
 DECISION_VALUES = ("include", "exclude", "needs_review")
@@ -282,7 +286,7 @@ def unwrap_triage_capture(payload):
 
 
 class JevClient:
-    """Minimal HTTP client for Jev structured classification."""
+    """Minimal HTTP client for Jev structured classification with per-thread keep-alive pooling."""
 
     def __init__(self, url, api_key, model=DEFAULT_JEV_MODEL, timeout=DEFAULT_TIMEOUT,
                  retries=DEFAULT_RETRIES, opener=None):
@@ -292,18 +296,55 @@ class JevClient:
         self.timeout = timeout
         self.retries = retries
         self._opener = opener
+        self._local = threading.local()
+        parsed = urllib.parse.urlsplit(self.url)
+        self._scheme = (parsed.scheme or "https").lower()
+        self._host = parsed.netloc
+        path = parsed.path or "/"
+        self._request_target = f"{path}?{parsed.query}" if parsed.query else path
+
+    def _get_conn(self, reset=False):
+        conn = getattr(self._local, "conn", None)
+        if conn is not None and reset:
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = None
+        if conn is None:
+            cls = http.client.HTTPSConnection if self._scheme == "https" else http.client.HTTPConnection
+            conn = cls(self._host, timeout=self.timeout)
+            self._local.conn = conn
+        return conn
 
     def _post(self, payload):
         if self._opener is not None:
             return self._opener(payload)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(self.url, data=body, headers={
+        headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": f"Bearer {self.api_key}",
-            "User-Agent": "wasp-lit-jev-triage/1.0"})
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:
-            return response.read().decode("utf-8")
+            "Connection": "keep-alive",
+            "User-Agent": "wasp-lit-jev-triage/1.0",
+        }
+        for reset in (False, True):
+            conn = self._get_conn(reset=reset)
+            try:
+                conn.request("POST", self._request_target, body=body, headers=headers)
+                response = conn.getresponse()
+                raw_bytes = response.read()
+                break
+            except (http.client.HTTPException, OSError):
+                self._get_conn(reset=True)
+                if reset:
+                    raise
+        if response.status >= 400:
+            body_text = raw_bytes.decode("utf-8", "replace")[:300]
+            err = JevError(f"HTTP {response.status}: {body_text or response.reason}")
+            err.http_status = response.status
+            raise err
+        return raw_bytes.decode("utf-8")
 
     def classify_one(self, gene, concept, context, article):
         """Classify one gene-concept-article tuple and return the raw envelope."""
@@ -345,6 +386,8 @@ class JevClient:
                     time.sleep(1.0 * (attempt + 1))
             except (OSError, ValueError, KeyError, JevError) as error:
                 failure = error
+                if getattr(error, "http_status", None) in (400, 401, 403, 404, 422):
+                    break
                 if attempt < self.retries:
                     time.sleep(1.0 * (attempt + 1))
         raise JevError("Jev classification failed: " + redact_jev_error(failure))
@@ -353,7 +396,7 @@ class JevClient:
         """Classify a list of (gene, concept, context, article) tuples with bounded concurrency."""
         if not tasks:
             return []
-        workers = max(1, min(int(max_workers or 1), 16, len(tasks)))
+        workers = max(1, min(int(max_workers or 1), MAX_TRIAGE_WORKERS, len(tasks)))
         if workers == 1:
             results = []
             for idx, (gene, concept, context, article) in enumerate(tasks, start=1):

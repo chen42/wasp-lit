@@ -157,6 +157,33 @@ class JevUnitTests(unittest.TestCase):
                 cfg_base = resolve_jev_config(explicit_url="https://api.typesafe.ai/v1/", env_path=env_file)
                 self.assertEqual(cfg_base["url"], DEFAULT_JEV_URL)
 
+    def test_classify_batch_runs_in_parallel_and_preserves_order(self):
+        gene = CONTEXT["genes"][0]
+        concept = {"id": "test/stress", "category": "test", "name": "stress", "terms": ["stress"]}
+        tasks = [
+            (gene, concept, CONTEXT, record(f"90000000{i}") | {"source_version": f"v{i}"})
+            for i in range(1, 7)
+        ]
+
+        def opener(payload):
+            pmid = payload["state"]["article"]["pmid"]
+            return json.dumps({
+                "answers": {
+                    "gene_identity": {"type": "choice", "choice": "confirmed", "probabilities": {"confirmed": 0.99}, "confidence": 0.99},
+                    "concept_addressed": {"type": "noul", "noul": 0.91 if int(pmid) % 2 == 0 else 0.12},
+                    "species_in_scope": {"type": "choice", "choice": "yes", "probabilities": {"yes": 0.98}, "confidence": 0.98},
+                    "decision": {"type": "choice", "choice": "include" if int(pmid) % 2 == 0 else "exclude",
+                                 "probabilities": {"include": 0.9, "exclude": 0.1}, "confidence": 0.9},
+                }
+            })
+
+        client = JevClient(DEFAULT_JEV_URL, "secret-token-123", opener=opener)
+        results = client.classify_batch(tasks, max_workers=4)
+        self.assertEqual([r["pmid"] for r in results], [f"90000000{i}" for i in range(1, 7)])
+        normalized = [normalize_triage_row(r, policy="never-hard-exclude") for r in results]
+        self.assertEqual([n["effective_decision"] for n in normalized],
+                         ["needs_review", "include", "needs_review", "include", "needs_review", "include"])
+
 
 class CrossHarnessStoreAndCliTests(unittest.TestCase):
     def setUp(self):

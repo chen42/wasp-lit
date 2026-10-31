@@ -216,7 +216,7 @@ def parser():
             command.add_argument("--endpoint", help="Override the Jev classification API URL (default: https://api.typesafe.ai/v1/systemone)")
             command.add_argument("--model", help="Override the Jev model identifier (default: typesafe/jev-latest)")
             command.add_argument("--workers", type=int, default=DEFAULT_TRIAGE_WORKERS,
-                                 help="Concurrent Jev classification workers (1-16, default: 8)")
+                                 help="Concurrent Jev classification workers (1-32, default: 16)")
             command.add_argument("--timeout", type=int, default=60)
             command.add_argument("--output")
         if name == "triage-report":

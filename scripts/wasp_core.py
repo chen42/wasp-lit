@@ -2,6 +2,7 @@
 
 import ast
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 import fcntl
@@ -12,6 +13,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import threading
 import uuid
 from zoneinfo import ZoneInfo
 
@@ -332,6 +334,7 @@ def _preserved_block(path, start_marker, end_marker, default_body):
 class Store:
     def __init__(self, root):
         self.root = Path(root).expanduser().resolve()
+        self._io_lock = threading.Lock()
         legacy_base = self.root / "references" / "wasp"
         if (legacy_base / "manifest.json").exists() and not (self.root / "corpus" / "manifest.json").exists():
             self.base = legacy_base
@@ -401,14 +404,15 @@ class Store:
         self.overview()
 
     def source(self, run_id, kind, payload, request=None, suffix=".json"):
-        folder = self.base / "sources" / run_id
-        path = folder / (kind + "-" + uuid.uuid4().hex + suffix)
-        immutable(path, payload)
-        ref = {"path": self.rel(path), "sha256": file_hash(path), "kind": kind,
-               "retrieved_at": now(), "request": request or {}, "run_id": run_id,
-               "license": "not checked"}
-        self.save_table("sources", self.table("sources") + [ref])
-        return ref
+        with self._io_lock:
+            folder = self.base / "sources" / run_id
+            path = folder / (kind + "-" + uuid.uuid4().hex + suffix)
+            immutable(path, payload)
+            ref = {"path": self.rel(path), "sha256": file_hash(path), "kind": kind,
+                   "retrieved_at": now(), "request": request or {}, "run_id": run_id,
+                   "license": "not checked"}
+            self.save_table("sources", self.table("sources") + [ref])
+            return ref
 
     def call(self, backend, run_id, method, *args):
         try:
@@ -499,26 +503,59 @@ class Store:
         return run
 
     def save_run(self, run):
-        atomic(self.base / "runs" / (run["run_id"] + ".json"), run)
+        with self._io_lock:
+            atomic(self.base / "runs" / (run["run_id"] + ".json"), run)
 
-    def collect(self, backend, run_id=None, refresh=False, batch_size=50):
+    def collect(self, backend, run_id=None, refresh=False, batch_size=200, search_workers=4):
         positive(batch_size, "batch_size")
+        positive(search_workers, "search_workers")
         if batch_size > 200:
             raise WaspError("Fetch batches must be at most 200 records")
+        if search_workers > 8:
+            raise WaspError("search_workers must be at most 8")
         run = self.new_run(run_id)
         if refresh and run["searches"]:
             raise WaspError("Refresh requires a new run, not an existing run ID")
         run["status"] = "collecting"
         self.save_run(run)
-        for query in load(self.base / "queries.json"):
-            qid = query["query_id"]
-            existing = run["searches"].get(qid, {})
-            if existing.get("coverage") == "complete_count_reconciled":
-                continue
-            enumeration = enumerate_pmids(
-                lambda term, maximum: self.call(backend, run["run_id"], "search", term, maximum)[0],
-                query["query"], query["abstract_cap"])
-            run["searches"][qid] = query | enumeration | {"searched_at": now()}
+        queries = load(self.base / "queries.json")
+        pending_queries = [q for q in queries
+                           if run["searches"].get(q["query_id"], {}).get("coverage") != "complete_count_reconciled"]
+        if pending_queries:
+            progress(f"collect search phase started; run={run['run_id']}; pending_queries={len(pending_queries)}/{len(queries)}; workers={min(search_workers, len(pending_queries))}")
+            def _run_one_search(query):
+                enumeration = enumerate_pmids(
+                    lambda term, maximum: self.call(backend, run["run_id"], "search", term, maximum)[0],
+                    query["query"], query["abstract_cap"])
+                return query["query_id"], query | enumeration | {"searched_at": now()}
+
+            if search_workers == 1 or len(pending_queries) <= 1:
+                for idx, query in enumerate(pending_queries, start=1):
+                    qid, entry = _run_one_search(query)
+                    run["searches"][qid] = entry
+                    if idx % 10 == 0 or idx == len(pending_queries):
+                        self.save_run(run)
+                        progress(f"search progress {idx}/{len(pending_queries)} queries completed")
+            else:
+                completed_count = 0
+                with ThreadPoolExecutor(max_workers=min(search_workers, len(pending_queries))) as pool:
+                    futures = {pool.submit(_run_one_search, q): q["query_id"] for q in pending_queries}
+                    for future in as_completed(futures):
+                        qid, entry = future.result()
+                        with self._io_lock:
+                            run["searches"][qid] = entry
+                            completed_count += 1
+                            should_checkpoint = (completed_count % 10 == 0 or completed_count == len(pending_queries))
+                        if should_checkpoint:
+                            self.save_run(run)
+                            progress(f"search progress {completed_count}/{len(pending_queries)} queries completed")
+            # Keep run['searches'] in canonical queries.json order
+            ordered_searches = {}
+            for q in queries:
+                qid = q["query_id"]
+                if qid in run["searches"]:
+                    ordered_searches[qid] = run["searches"][qid]
+            run["searches"] = ordered_searches
             self.save_run(run)
         membership = [m for m in self.table("membership") if m["run_id"] != run["run_id"]]
         for qid, search in run["searches"].items():
@@ -534,11 +571,14 @@ class Store:
                 self.article(pmid, current[pmid]["source_version"])
                 run["record_hashes"][pmid] = current[pmid]["source_version"]
         pending = [p for p in selected if p not in run["record_hashes"]]
+        if pending:
+            progress(f"collect fetch phase started; run={run['run_id']}; pending_pmids={len(pending)}; batch_size={batch_size}")
         # One reconciliation pass for omitted records; no endless one-ID retries.
         missing = []
         for attempt in range(2):
             missing = []
-            for start in range(0, len(pending), batch_size):
+            total_batches = (len(pending) + batch_size - 1) // batch_size if pending else 0
+            for batch_idx, start in enumerate(range(0, len(pending), batch_size), start=1):
                 batch = pending[start:start + batch_size]
                 try:
                     data, ref = self.call(backend, run["run_id"], "fetch", batch)
@@ -551,9 +591,11 @@ class Store:
                     self.put_records(records, ref)
                     run["record_hashes"].update({r["pmid"]: digest(r) for r in records})
                     missing.extend(p for p in batch if p not in got)
+                    progress(f"fetch batch {batch_idx}/{total_batches} (pass {attempt + 1}) retrieved {len(got)}/{len(batch)} records")
                 except Exception as error:
                     run.setdefault("fetch_errors", []).append({"pmids": batch, "error": str(error), "at": now()})
                     missing.extend(batch)
+                    progress(f"fetch batch {batch_idx}/{total_batches} (pass {attempt + 1}) failed: {error}")
                 self.save_run(run)
             pending = missing
             if not pending:
@@ -564,6 +606,7 @@ class Store:
         run["updated_at"] = now()
         self.save_run(run)
         self.overview()
+        progress(f"collect finished; run={run['run_id']}; status={run['status']}; retrieved={len(run['record_hashes'])}; missing={len(pending)}")
         return run
 
     def jobs(self, run_id, batch_size=20, max_bytes=40000, wave_size=64, dispatch_size=6, model=None):

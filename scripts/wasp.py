@@ -186,7 +186,9 @@ def parser():
             command.add_argument("--source", choices=("pubmed", "gwas_catalog"), default="pubmed")
         if name == "collect":
             command.add_argument("--refresh", action="store_true")
-            command.add_argument("--batch-size", type=int, default=50)
+            command.add_argument("--batch-size", type=int, default=200)
+            command.add_argument("--search-workers", type=int, default=4,
+                                 help="Concurrent ESearch workers (1-8, default: 4; rate-limited by polite-http)")
         if name == "jobs":
             command.add_argument("--run-id", required=True)
             command.add_argument("--batch-size", type=int, default=20)
@@ -351,7 +353,7 @@ def main(argv=None):
         if args.command == "plan-search":
             return {"queries": str(store.base / "queries.json"), "query_count": len(load(store.base / "queries.json"))}
         if args.command == "collect":
-            run = store.collect(backend(args, store), args.run_id, args.refresh, args.batch_size)
+            run = store.collect(backend(args, store), args.run_id, args.refresh, args.batch_size, args.search_workers)
             return {"run_id": run["run_id"], "status": run["status"], "retrieved_records": len(run.get("record_hashes", run.get("versions", {}))),
                     "missing_records": run["missing_records"], "run_path": str(store.base / "runs" / (run["run_id"] + ".json"))}
         if args.command == "jobs":

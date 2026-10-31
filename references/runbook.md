@@ -57,6 +57,8 @@ uv run --python 3.12 --with python-dotenv --with polite-http \
 python3 "$SKILL/scripts/wasp.py" status "$PROJECT"
 ```
 
+Run `wasp.py collect` directly in the foreground. It uses 4 concurrent rate-limited search workers (`--search-workers 4`) and 200-record fetch batches (`--batch-size 200`), streams timestamped progress to `stderr`, and typically finishes 51 queries and ~700 abstracts in 15 to 25 seconds. Never background `collect` and poll it with `while pgrep -f "wasp.py collect"`, because `pgrep -f` matches its own subshell command line and loops forever after `collect` has already exited.
+
 The coordinator dynamically imports the installed PubMed wrapper, so `uv` does not automatically apply the wrapper script's inline dependency metadata. Declare `python-dotenv` and `polite-http` on the `uv run` command. If their wheels are cached, add `--offline` to avoid dependency resolution over the network; the live retrieval command still makes PubMed requests. Resume by repeating the same run ID. To update sources, use a new run ID with `--refresh`. A PubMed wrapper at a nonstandard location can be passed through `--pubmed-wrapper`.
 
 ## Screening

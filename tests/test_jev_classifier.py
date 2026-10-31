@@ -13,6 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from jev_classifier import (  # noqa: E402
+    DEFAULT_INSTRUCTIONS,
     DEFAULT_JEV_MODEL,
     DEFAULT_JEV_URL,
     JevCaptureError,
@@ -20,6 +21,7 @@ from jev_classifier import (  # noqa: E402
     JevError,
     build_questions,
     build_state,
+    load_instructions,
     normalize_triage_row,
     redact_jev_error,
     resolve_jev_config,
@@ -34,11 +36,14 @@ class JevUnitTests(unittest.TestCase):
     def test_build_state_and_questions(self):
         gene = CONTEXT["genes"][0]
         concept = {"id": "test/stress", "category": "test", "name": "stress", "terms": ["stress"]}
-        art = record("900000001") | {"source_version": "sha-test"}
+        art = record("900000001") | {"source_version": "sha-test", "publication_types": ["Journal Article", "Review"]}
         state = build_state(gene, concept, CONTEXT, art)
         self.assertEqual(state["gene"]["symbol"], "WASP_TEST_GENE")
         self.assertEqual(state["concept"]["id"], "test/stress")
         self.assertEqual(state["article"]["pmid"], "900000001")
+        self.assertEqual(state["article"]["publication_types"], ["Journal Article", "Review"])
+        self.assertEqual(state["scope"], {"evidence_species": CONTEXT["evidence_species"]})
+        self.assertEqual(load_instructions(), DEFAULT_INSTRUCTIONS)
         questions = build_questions()
         self.assertEqual(list(questions.keys()),
                          ["gene_identity", "concept_addressed", "species_in_scope", "decision"])
@@ -80,6 +85,22 @@ class JevUnitTests(unittest.TestCase):
         for policy in ("never-hard-exclude", "raw"):
             normalized = normalize_triage_row(raw, policy=policy)
             self.assertEqual(normalized["effective_decision"], "needs_review")
+
+        out_of_scope = {
+            "pmid": "900000001",
+            "gene": "WASP_TEST_GENE",
+            "concept_id": "test/stress",
+            "source_version": "v1",
+            "answers": {
+                "gene_identity": {"choice": "confirmed"},
+                "concept_addressed": {"noul": 0.95},
+                "species_in_scope": {"choice": "no"},
+                "decision": {"choice": "include", "probability": 0.61},
+            },
+        }
+        self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["raw_decision"], "exclude")
+        self.assertEqual(normalize_triage_row(out_of_scope, policy="raw")["effective_decision"], "exclude")
+        self.assertEqual(normalize_triage_row(out_of_scope, policy="never-hard-exclude")["effective_decision"], "needs_review")
 
     def test_invalid_triage_rows_rejected(self):
         base = {

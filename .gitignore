@@ -4,7 +4,6 @@ __pycache__/
 
 # Design, review, and provenance material not needed to run the skill
 abstract.txt
-jev.md
 repo.url
 plan/*
 !plan/ontology-curation.md

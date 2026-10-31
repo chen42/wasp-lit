@@ -12,16 +12,20 @@ policy, classifier exclusions are rerouted to `needs_review` so no relevant
 paper is silently dropped before abstract screening.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import os
 from pathlib import Path
 import re
 import time
+import urllib.error
 import urllib.request
 
+DEFAULT_JEV_URL = "https://api.typesafe.ai/v1/systemone"
 DEFAULT_JEV_MODEL = "typesafe/jev-latest"
 DEFAULT_TIMEOUT = 60
 DEFAULT_RETRIES = 2
+DEFAULT_TRIAGE_WORKERS = 8
 TRIAGE_POLICIES = ("never-hard-exclude", "raw")
 GENE_IDENTITY_VALUES = ("confirmed", "ambiguous", "absent")
 DECISION_VALUES = ("include", "exclude", "needs_review")
@@ -93,32 +97,44 @@ def build_state(gene, concept, context, article):
 
 
 def build_questions():
-    """Return the typed classification questions for Jev."""
-    return [
-        {
-            "id": "gene_identity",
+    """Return the TypeSafe System One classification questions dictionary for Jev."""
+    return {
+        "gene_identity": {
             "type": "choice",
-            "question": "Does the abstract concern the intended gene, an ambiguous symbol match, or is the gene absent?",
-            "options": list(GENE_IDENTITY_VALUES),
+            "instructions": "Does the abstract concern the intended gene, an ambiguous symbol match, or is the gene absent?",
+            "criteria": {
+                "confirmed": "The abstract clearly concerns the intended gene, its approved ortholog, or its protein product.",
+                "ambiguous": "A symbol or alias appears, but the abstract does not resolve whether it refers to the intended gene.",
+                "absent": "The abstract concerns a different entity or does not involve the intended gene.",
+            },
         },
-        {
-            "id": "concept_addressed",
-            "type": "boolean",
-            "question": "Does the abstract address the specified ontology concept or its terms?",
+        "concept_addressed": {
+            "type": "noul",
+            "instructions": "Does the abstract address the specified ontology concept or its terms?",
+            "criteria": {
+                "true": "The abstract addresses the specified concept or one of its terms anywhere in the text.",
+                "false": "The abstract does not address the specified concept or only uses a word in an unrelated sense.",
+            },
         },
-        {
-            "id": "species_in_scope",
+        "species_in_scope": {
             "type": "choice",
-            "question": "Is the reported experimental system within the stated evidence-species scope?",
-            "options": ["yes", "no", "unclear"],
+            "instructions": "Is the reported experimental system within the stated evidence-species scope?",
+            "criteria": {
+                "yes": "The study uses an organism or system within the allowed evidence-species scope.",
+                "no": "The study is restricted to an organism outside the allowed evidence-species scope.",
+                "unclear": "The abstract does not specify the organism or scope compatibility is unclear.",
+            },
         },
-        {
-            "id": "decision",
+        "decision": {
             "type": "choice",
-            "question": "What is the initial screening triage decision for this gene and concept pair?",
-            "options": list(DECISION_VALUES),
+            "instructions": "What is the initial screening triage decision for this gene and concept pair?",
+            "criteria": {
+                "include": "Gene identity is confirmed and the abstract addresses the concept within the allowed evidence-species scope.",
+                "needs_review": "Gene identity, concept relevance, or species scope is ambiguous or requires closer inspection.",
+                "exclude": "Gene is absent, or the abstract clearly does not address the concept or is outside the allowed species scope.",
+            },
         },
-    ]
+    }
 
 
 def _load_dotenv_fallback(env_path=None):
@@ -146,6 +162,14 @@ def _load_dotenv_fallback(env_path=None):
     return values
 
 
+def _normalize_jev_url(url):
+    """Normalize a TypeSafe base URL or full endpoint URL to the System One endpoint."""
+    cleaned = str(url).strip()
+    if cleaned.rstrip("/").endswith("api.typesafe.ai/v1"):
+        return cleaned.rstrip("/") + "/systemone"
+    return cleaned
+
+
 def resolve_jev_config(explicit_url=None, model=None, env_path=None):
     """Resolve the Jev classification endpoint URL, API key, and model from os.environ or ~/.env."""
     dotenv_vals = _load_dotenv_fallback(env_path)
@@ -155,12 +179,10 @@ def resolve_jev_config(explicit_url=None, model=None, env_path=None):
             return val
         return dotenv_vals.get(name)
 
-    url = explicit_url or get_var("WASP_JEV_API_URL") or get_var("TYPESAFE_CLASSIFY_URL")
+    raw_url = explicit_url or get_var("WASP_JEV_API_URL") or get_var("TYPESAFE_CLASSIFY_URL") or DEFAULT_JEV_URL
+    url = _normalize_jev_url(raw_url)
     key = get_var("WASP_JEV_API_KEY") or get_var("TYPESAFE_API_KEY")
     resolved_model = (model or get_var("WASP_JEV_MODEL") or DEFAULT_JEV_MODEL).strip()
-    if not url:
-        raise JevError("No Jev classification URL configured. Set WASP_JEV_API_URL in ~/.env, pass --endpoint, "
-                       "or supply saved triage captures with --capture")
     if not key:
         raise JevError("Safe credential setup required for WASP_JEV_API_KEY or TYPESAFE_API_KEY in ~/.env; "
                        "add locally using hidden terminal input, never in chat")
@@ -194,20 +216,32 @@ def normalize_triage_row(raw, policy="never-hard-exclude"):
     answers = raw.get("answers") if isinstance(raw.get("answers"), dict) else raw
     gene_identity = answers.get("gene_identity")
     if isinstance(gene_identity, dict):
-        gene_identity = gene_identity.get("value") or gene_identity.get("label")
+        gene_identity = gene_identity.get("choice") or gene_identity.get("value") or gene_identity.get("label")
     if gene_identity not in GENE_IDENTITY_VALUES:
         raise JevCaptureError(f"Invalid gene_identity for PMID {pmid}: {gene_identity!r}")
     concept_addressed = answers.get("concept_addressed")
     if isinstance(concept_addressed, dict):
-        concept_addressed = concept_addressed.get("value")
+        if isinstance(concept_addressed.get("value"), bool):
+            concept_addressed = concept_addressed["value"]
+        elif isinstance(concept_addressed.get("noul"), (int, float)) and not isinstance(concept_addressed.get("noul"), bool):
+            concept_addressed = float(concept_addressed["noul"]) >= 0.5
+        elif isinstance(concept_addressed.get("probability"), (int, float)) and not isinstance(concept_addressed.get("probability"), bool):
+            concept_addressed = float(concept_addressed["probability"]) >= 0.5
+        elif concept_addressed.get("choice") in ("true", "false"):
+            concept_addressed = concept_addressed["choice"] == "true"
     if not isinstance(concept_addressed, bool):
         raise JevCaptureError(f"Invalid Boolean concept_addressed for PMID {pmid}")
     raw_decision = answers.get("decision")
     confidence = raw.get("confidence")
     if isinstance(raw_decision, dict):
+        choice_val = raw_decision.get("choice") or raw_decision.get("value") or raw_decision.get("label")
         if confidence is None:
-            confidence = raw_decision.get("probability") or raw_decision.get("confidence")
-        raw_decision = raw_decision.get("value") or raw_decision.get("label")
+            confidence = raw_decision.get("confidence")
+            if confidence is None:
+                confidence = raw_decision.get("probability")
+            if confidence is None and isinstance(raw_decision.get("probabilities"), dict) and choice_val in raw_decision["probabilities"]:
+                confidence = raw_decision["probabilities"][choice_val]
+        raw_decision = choice_val
     if raw_decision not in DECISION_VALUES:
         raise JevCaptureError(f"Invalid triage decision for PMID {pmid}: {raw_decision!r}")
     if confidence is not None:
@@ -274,8 +308,9 @@ class JevClient:
 
     def classify_one(self, gene, concept, context, article):
         """Classify one gene-concept-article tuple and return the raw envelope."""
+        wire_model = self.model.split("/", 1)[1] if self.model.startswith("typesafe/") else self.model
         request_payload = {
-            "model": self.model,
+            "model": wire_model,
             "state": build_state(gene, concept, context, article),
             "questions": build_questions(),
         }
@@ -298,8 +333,46 @@ class JevClient:
                     "confidence": parsed.get("confidence") or parsed.get("probability"),
                     "raw_response": parsed,
                 }
+            except urllib.error.HTTPError as error:
+                body_text = ""
+                try:
+                    body_text = error.read().decode("utf-8", "replace")[:300]
+                except Exception:
+                    pass
+                failure = JevError(f"HTTP {error.code}: {body_text or error.reason}")
+                if error.code in (400, 401, 403, 404, 422):
+                    break
+                if attempt < self.retries:
+                    time.sleep(1.0 * (attempt + 1))
             except (OSError, ValueError, KeyError, JevError) as error:
                 failure = error
                 if attempt < self.retries:
                     time.sleep(1.0 * (attempt + 1))
         raise JevError("Jev classification failed: " + redact_jev_error(failure))
+
+    def classify_batch(self, tasks, max_workers=DEFAULT_TRIAGE_WORKERS, progress_fn=None):
+        """Classify a list of (gene, concept, context, article) tuples with bounded concurrency."""
+        if not tasks:
+            return []
+        workers = max(1, min(int(max_workers or 1), 16, len(tasks)))
+        if workers == 1:
+            results = []
+            for idx, (gene, concept, context, article) in enumerate(tasks, start=1):
+                results.append(self.classify_one(gene, concept, context, article))
+                if progress_fn and (idx % 25 == 0 or idx == len(tasks)):
+                    progress_fn(f"Jev triage progress {idx}/{len(tasks)} pairs classified")
+            return results
+        ordered = [None] * len(tasks)
+        completed = 0
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            future_map = {
+                pool.submit(self.classify_one, gene, concept, context, article): idx
+                for idx, (gene, concept, context, article) in enumerate(tasks)
+            }
+            for future in as_completed(future_map):
+                idx = future_map[future]
+                ordered[idx] = future.result()
+                completed += 1
+                if progress_fn and (completed % 50 == 0 or completed == len(tasks)):
+                    progress_fn(f"Jev triage progress {completed}/{len(tasks)} pairs classified")
+        return ordered

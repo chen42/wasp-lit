@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from jev_classifier import (  # noqa: E402
     DEFAULT_JEV_MODEL,
+    DEFAULT_JEV_URL,
     JevCaptureError,
     JevClient,
     JevError,
@@ -39,8 +40,10 @@ class JevUnitTests(unittest.TestCase):
         self.assertEqual(state["concept"]["id"], "test/stress")
         self.assertEqual(state["article"]["pmid"], "900000001")
         questions = build_questions()
-        self.assertEqual([q["id"] for q in questions],
+        self.assertEqual(list(questions.keys()),
                          ["gene_identity", "concept_addressed", "species_in_scope", "decision"])
+        self.assertEqual(questions["gene_identity"]["type"], "choice")
+        self.assertEqual(questions["concept_addressed"]["type"], "noul")
 
     def test_never_hard_exclude_reroutes_exclude_to_needs_review(self):
         raw = {
@@ -137,13 +140,23 @@ class JevUnitTests(unittest.TestCase):
             self.assertNotIn("secret-token-123", redacted)
             self.assertIn("<redacted>", redacted)
 
-    def test_resolve_jev_config_requires_url_and_key_and_reads_dotenv(self):
+    def test_resolve_jev_config_defaults_to_typesafe_systemone_and_reads_dotenv(self):
         with tempfile.TemporaryDirectory() as fake_home:
             env_file = Path(fake_home) / ".env"
             with patch.dict(os.environ, {"WASP_JEV_API_URL": "", "TYPESAFE_CLASSIFY_URL": "",
                                          "WASP_JEV_API_KEY": "", "TYPESAFE_API_KEY": ""}, clear=False):
                 with self.assertRaises(JevError):
                     resolve_jev_config(env_path=env_file)
+            env_file.write_text('TYPESAFE_API_KEY=dotenv-secret\n', encoding="utf-8")
+            with patch.dict(os.environ, {}, clear=False):
+                for k in ("WASP_JEV_API_URL", "TYPESAFE_CLASSIFY_URL", "WASP_JEV_API_KEY", "TYPESAFE_API_KEY"):
+                    os.environ.pop(k, None)
+                cfg = resolve_jev_config(env_path=env_file)
+                self.assertEqual(cfg["url"], DEFAULT_JEV_URL)
+                self.assertEqual(cfg["api_key"], "dotenv-secret")
+                self.assertEqual(cfg["model"], DEFAULT_JEV_MODEL)
+                cfg_base = resolve_jev_config(explicit_url="https://api.typesafe.ai/v1/", env_path=env_file)
+                self.assertEqual(cfg_base["url"], DEFAULT_JEV_URL)
             env_file.write_text('WASP_JEV_API_URL="https://dotenv.invalid/v1"\nTYPESAFE_API_KEY=dotenv-secret\n',
                                 encoding="utf-8")
             with patch.dict(os.environ, {}, clear=False):

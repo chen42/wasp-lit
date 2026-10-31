@@ -14,9 +14,9 @@ import sys
 
 from gwas_catalog import (CaptureError, CatalogError, CatalogMCP, infer_tool, page_info,
                           resolve_endpoint, unwrap)
-from jev_classifier import (JevClient, JevError, TRIAGE_POLICIES, resolve_jev_config)
+from jev_classifier import (DEFAULT_TRIAGE_WORKERS, JevClient, JevError, TRIAGE_POLICIES, resolve_jev_config)
 from wasp_core import (WaspError, Store, VERSION, atomic, load, normalize_ontology,
-                          now, SKILL_ROOT)
+                          now, progress, SKILL_ROOT)
 from pubmed_extension import PubmedBackend
 
 
@@ -213,8 +213,10 @@ def parser():
                                  help="Saved Jev classification capture file; omit to classify live via HTTP")
             command.add_argument("--policy", choices=TRIAGE_POLICIES, default="never-hard-exclude",
                                  help="Triage policy (default: never-hard-exclude, which reroutes exclusions to needs_review)")
-            command.add_argument("--endpoint", help="Override the Jev classification API URL")
+            command.add_argument("--endpoint", help="Override the Jev classification API URL (default: https://api.typesafe.ai/v1/systemone)")
             command.add_argument("--model", help="Override the Jev model identifier (default: typesafe/jev-latest)")
+            command.add_argument("--workers", type=int, default=DEFAULT_TRIAGE_WORKERS,
+                                 help="Concurrent Jev classification workers (1-16, default: 8)")
             command.add_argument("--timeout", type=int, default=60)
             command.add_argument("--output")
         if name == "triage-report":
@@ -385,21 +387,27 @@ def main(argv=None):
                 run_data = load(store.base / "runs" / (args.run_id + ".json"))
                 context_data = load(store.base / "context.json")
                 record_hashes = run_data.get("record_hashes", run_data.get("versions", {}))
-                rows = []
+                tasks = []
+                seen_pairs = set()
                 for search in run_data["searches"].values():
                     gene = next(g for g in context_data["genes"] if g["symbol"] == search["gene"])
                     for pmid in search["selected_pmids"]:
+                        pair_key = (gene["symbol"], search["concept"]["id"], pmid)
+                        if pair_key in seen_pairs:
+                            continue
                         version = record_hashes.get(pmid)
                         if not version:
                             continue
                         article = store.article(pmid, version)
                         if not article.get("abstract") or not article["abstract"].strip():
                             continue
-                        try:
-                            rows.append(client.classify_one(gene, search["concept"], context_data,
-                                                            article | {"source_version": version}))
-                        except JevError as error:
-                            raise WaspError(str(error)) from None
+                        seen_pairs.add(pair_key)
+                        tasks.append((gene, search["concept"], context_data, article | {"source_version": version}))
+                progress(f"Jev triage started; run={args.run_id}; pairs={len(tasks)}; workers={args.workers}; endpoint={cfg['url']}")
+                try:
+                    rows = client.classify_batch(tasks, max_workers=args.workers, progress_fn=progress)
+                except JevError as error:
+                    raise WaspError(str(error)) from None
                 captures = [{"name": f"live-jev-{args.run_id}.json", "payload": {"classifications": rows}}]
             result = store.ingest_triage(captures, args.run_id, policy=args.policy)
             if args.output:

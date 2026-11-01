@@ -1,7 +1,8 @@
 # Candidate-gene plausibility assessment
 
-Date: [date]
-Workspace/run: [workspace and run ID]
+Date: [date]<br>
+Workspace/run: [workspace and run ID]<br>
+Model: [LLM model name]
 
 ## Summary
 

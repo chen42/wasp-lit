@@ -151,6 +151,26 @@ h1 {
   border-bottom: 1px solid var(--border-color);
 }
 
+/* Document Header Metadata */
+.doc-metadata {
+  color: #8fa0b2;
+  font-size: 0.88em;
+  line-height: 1.65;
+  margin-top: 4px;
+  margin-bottom: 24px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.doc-metadata a {
+  color: #8fa0b2;
+  text-decoration: underline;
+}
+
+.doc-metadata a:hover {
+  color: var(--accent-hover-color);
+}
+
 h2 {
   font-size: 1.35em;
   margin-top: 1.8em;
@@ -205,7 +225,7 @@ a.pmid-link {
   padding: 0;
   margin: 0;
   font-family: inherit;
-  font-size: inherit;
+  font-size: calc(1em - 2px);
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
@@ -608,6 +628,53 @@ NAV_PAGES = [
 ]
 
 
+def detect_runtime_model(workspace_path=None):
+    """Detect the active LLM or agent runtime model across major environments."""
+    if workspace_path:
+        ctx_file = Path(workspace_path) / "corpus" / "context.json"
+        if ctx_file.exists():
+            try:
+                data = json.loads(ctx_file.read_text(encoding="utf-8"))
+                if data.get("llm_model"):
+                    return data["llm_model"]
+                if data.get("model"):
+                    return data["model"]
+            except Exception:
+                pass
+
+    for var in ("WASP_LLM_MODEL", "LLM_MODEL", "MODEL_NAME", "AGENT_MODEL"):
+        val = os.environ.get(var)
+        if val and val.strip():
+            return val.strip()
+
+    app_data = os.environ.get("ANTIGRAVITY_APP_DATA_DIR")
+    conv_id = os.environ.get("ANTIGRAVITY_CONVERSATION_ID")
+    if app_data and conv_id:
+        transcript = Path(app_data) / "brain" / conv_id / ".system_generated" / "logs" / "transcript.jsonl"
+        if transcript.exists():
+            try:
+                with open(transcript, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if "Model Selection" in line:
+                            m = re.search(r"Model Selection\` from None to ([^.]+)\.", line)
+                            if m:
+                                return m.group(1).strip()
+            except Exception:
+                pass
+        return "Google Antigravity"
+
+    if os.environ.get("CLAUDE_CODE"):
+        return os.environ.get("ANTHROPIC_MODEL", "Anthropic Claude Code")
+
+    if os.environ.get("OLLAMA_MODEL"):
+        return f"Ollama ({os.environ['OLLAMA_MODEL']})"
+
+    if os.environ.get("OPENAI_MODEL"):
+        return os.environ["OPENAI_MODEL"]
+
+    return None
+
+
 def render_html_page(title, body_html, active_key, gene_symbol, cache_dict):
     """Wrap body HTML in the complete dark theme layout with nav and SourceCery script."""
     nav_links = []
@@ -719,6 +786,36 @@ def process_markdown_file(md_path, workspace_dir, gene_symbol, pmid_cache):
     h1 = soup.find("h1")
     if h1 and h1.text.strip():
         title = h1.text.strip()
+
+    # 4. Tag document metadata block right after H1 and guarantee line breaks
+    if h1:
+        next_sibling = h1.find_next_sibling()
+        if next_sibling and next_sibling.name == "p":
+            text_content = next_sibling.get_text()
+            if any(k in text_content for k in ("Date:", "Workspace/run:", "Model:", "Run:")):
+                raw_lines = [l.strip() for l in re.split(r"[\r\n]+|<br\s*/?>", str(next_sibling)) if l.strip()]
+                clean_lines = []
+                for l in raw_lines:
+                    cleaned = re.sub(r"^<p[^>]*>|</p>$", "", l).strip()
+                    if cleaned:
+                        clean_lines.append(cleaned)
+
+                # Check if Model: is present, or append detected model for synthesis
+                has_model = any(l.startswith("Model:") for l in clean_lines)
+                if not has_model and md_path.stem == "synthesis":
+                    detected = detect_runtime_model(workspace_dir)
+                    if detected:
+                        clean_lines.append(f"Model: {detected}")
+
+                if len(clean_lines) > 1:
+                    new_inner_html = "<br>\n".join(clean_lines)
+                    new_p = BeautifulSoup(f'<p class="doc-metadata">{new_inner_html}</p>', "html.parser").find("p")
+                    next_sibling.replace_with(new_p)
+                else:
+                    classes = next_sibling.get("class", [])
+                    if "doc-metadata" not in classes:
+                        classes.append("doc-metadata")
+                    next_sibling["class"] = classes
 
     # Determine subset of cache needed for this file (or full cache)
     # For small/medium sets, full cache provides instant tooltips everywhere

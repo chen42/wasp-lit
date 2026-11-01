@@ -98,6 +98,75 @@ class RenderHtmlTests(unittest.TestCase):
         self.assertIn("Structure and function of CaV1.2 calcium channels.", html_content)
         self.assertIn("Author A, ..., Author D", html_content)
 
+        # 7. Check ontology.html was generated and linked in navigation
+        self.assertTrue((self.workspace / "ontology.html").is_file())
+        ont_nav = soup.find("a", href="./ontology.html")
+        self.assertIsNotNone(ont_nav)
+        self.assertEqual(ont_nav.text, "Ontology")
+
+        ont_html = (self.workspace / "ontology.html").read_text(encoding="utf-8")
+        ont_soup = BeautifulSoup(ont_html, "html.parser")
+        ont_active_nav = ont_soup.find("a", class_="nav-link active")
+        self.assertIsNotNone(ont_active_nav)
+        self.assertEqual(ont_active_nav["href"], "./ontology.html")
+        self.assertIsNotNone(ont_soup.find("div", class_="kpi-grid"))
+        self.assertIsNotNone(ont_soup.find("div", class_="tree-container"))
+
+    def test_generate_ontology_markdown_with_focused_concepts(self):
+        # Create a workspace with a run containing focused concepts and fulltext
+        run_data = {
+            "run_id": "r1-test",
+            "created_at": "2026-10-31T12:00:00Z",
+            "searches": {
+                "q-focused": {
+                    "abstract_cap": 200,
+                    "count": 12,
+                    "selected_pmids": ["37047381"],
+                    "query": "CACNA1C AND nicotine",
+                    "concept": {
+                        "category": "drug",
+                        "id": "drug/nicotine",
+                        "name": "nicotine",
+                        "terms": ["nicotine", "smoking"],
+                    },
+                },
+                "q-std": {
+                    "abstract_cap": 30,
+                    "count": 5,
+                    "selected_pmids": [],
+                    "query": "CACNA1C AND alcohol",
+                    "concept": {
+                        "category": "drug",
+                        "id": "drug/alcohol",
+                        "name": "alcohol",
+                        "terms": ["alcohol"],
+                    },
+                },
+            },
+        }
+        (self.workspace / "corpus" / "runs").mkdir(parents=True, exist_ok=True)
+        (self.workspace / "corpus" / "runs" / "run_01.json").write_text(json.dumps(run_data), encoding="utf-8")
+
+        # Add fulltext entry for 37047381
+        ft_entry = {"pmid": "37047381", "pmcid": "PMC1234567"}
+        (self.workspace / "corpus" / "fulltexts.jsonl").write_text(json.dumps(ft_entry) + "\n", encoding="utf-8")
+
+        res = self.store.render_html()
+        self.assertTrue((self.workspace / "ontology.html").is_file())
+
+        ont_html = (self.workspace / "ontology.html").read_text(encoding="utf-8")
+        ont_soup = BeautifulSoup(ont_html, "html.parser")
+
+        # Verify focused badge and styling
+        focused_leaf = ont_soup.find("div", class_="tree-leaf is-focused")
+        self.assertIsNotNone(focused_leaf)
+        self.assertIn("Focused (Cap 200)", focused_leaf.text)
+        self.assertIn("drug/nicotine", focused_leaf.text)
+
+        # Verify fulltext link rendered in leaf node
+        ft_links = focused_leaf.find_all("a", class_="pmid-link")
+        self.assertTrue(any(l.get("data-pmid") == "37047381" for l in ft_links))
+
     def test_detect_accurate_provenance_pi_dev(self):
         import os
         from render_html import detect_accurate_provenance

@@ -1833,6 +1833,7 @@ class Store:
             "## Top-Level Human-Readable Documents",
             "",
             "- [Evidence synthesis](./synthesis.md): Narrative synthesis integrating baseline gene biology, GWAS associations, and screened PubMed evidence.",
+            "- [Literature search ontology](./ontology.md): Hierarchical search ontology, priority focus status, abstract caps, and full-text corpus mapping.",
             "- [User decision log](./user-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
             "- [AI decision and screening log](./ai-decisions.md): AI concept-prioritization rationale, Jev triage summary, and per-PMID subagent screening tables.",
             "- [Baseline gene function summary](./gene-function.md): Baseline molecular, expression, and structural context.",
@@ -1858,6 +1859,11 @@ class Store:
             "",
         ])
         path.write_text(content, encoding="utf-8")
+
+    def render_ontology_md(self):
+        """Render top-level ontology.md describing search ontology hierarchy and corpus partitioning."""
+        from render_html import generate_ontology_markdown
+        return generate_ontology_markdown(self.root)
 
     def render_html(self):
         """Render workspace Markdown documents (synthesis, gene-function, decisions, etc.) to interactive HTML."""

@@ -2,6 +2,7 @@
 """Render wasp-lit workspace Markdown files as interactive HTML documents with dark theme and PubMed tooltips."""
 
 import argparse
+from collections import defaultdict
 import html
 import json
 import os
@@ -380,6 +381,261 @@ hr {
   font-style: italic;
   color: var(--text-muted);
 }
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 14px;
+  margin: 24px 0 32px 0;
+}
+
+.kpi-card {
+  background-color: var(--panel-bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px 18px;
+  text-align: left;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.kpi-value {
+  font-size: 1.85em;
+  font-weight: 700;
+  color: var(--accent-color);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.kpi-card.kpi-focused .kpi-value {
+  color: #ebcb8b;
+}
+
+.kpi-card.kpi-fulltext .kpi-value {
+  color: #b48ead;
+}
+
+.kpi-label {
+  font-size: 0.82em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.kpi-sub {
+  font-size: 0.8em;
+  color: var(--authoryear-color);
+  margin-top: 4px;
+}
+
+/* Tree Structure Styles */
+.tree-container {
+  margin: 28px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+details.tree-branch {
+  margin: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: rgba(29, 33, 42, 0.6);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+details.tree-branch[open] {
+  background-color: var(--panel-bg-color);
+  border-color: rgba(136, 192, 208, 0.35);
+}
+
+summary.tree-summary {
+  padding: 14px 18px;
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  background-color: var(--control-bg-color);
+  transition: background-color 0.15s ease;
+  color: var(--header-color);
+  list-style: none;
+}
+
+summary.tree-summary::-webkit-details-marker {
+  display: none;
+}
+
+summary.tree-summary:hover {
+  background-color: rgba(136, 192, 208, 0.15);
+}
+
+.tree-summary-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tree-summary-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tree-arrow {
+  display: inline-block;
+  transition: transform 0.2s ease;
+  font-size: 0.75em;
+  color: var(--accent-color);
+}
+
+details.tree-branch[open] > summary.tree-summary .tree-arrow {
+  transform: rotate(90deg);
+}
+
+.tree-category-name {
+  font-size: 1.05em;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.tree-branch-body {
+  padding: 16px 20px 20px 20px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tree-leaf {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background-color: var(--card-bg-color);
+  border: 1px solid var(--border-light);
+  transition: border-color 0.15s ease;
+}
+
+.tree-leaf:hover {
+  border-color: rgba(136, 192, 208, 0.4);
+}
+
+.tree-leaf.is-focused {
+  border-left: 4px solid #ebcb8b;
+  background-color: rgba(235, 203, 139, 0.04);
+}
+
+.tree-leaf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.tree-leaf-title {
+  font-weight: 600;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tree-leaf-title code {
+  color: #88c0d0;
+  font-size: 0.82em;
+}
+
+.tree-stats {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tree-terms {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.tree-fulltexts {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-light);
+  font-size: 0.86em;
+}
+
+.tree-fulltexts-label {
+  font-weight: 600;
+  color: #b48ead;
+  margin-bottom: 6px;
+}
+
+.tree-fulltexts ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tree-fulltexts li {
+  margin-bottom: 4px;
+  line-height: 1.4;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.74em;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+  line-height: 1.3;
+}
+
+.badge-focused {
+  background-color: rgba(235, 203, 139, 0.18);
+  color: #ebcb8b;
+  border: 1px solid rgba(235, 203, 139, 0.4);
+}
+
+.badge-standard {
+  background-color: rgba(216, 222, 233, 0.08);
+  color: var(--authoryear-color);
+  border: 1px solid rgba(216, 222, 233, 0.18);
+}
+
+.badge-stat {
+  background-color: var(--control-bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  font-size: 0.76em;
+}
+
+.badge-stat strong {
+  color: var(--accent-color);
+  margin-left: 3px;
+}
+
+.badge-stat.stat-included strong {
+  color: #a3be8c;
+}
+
+.badge-stat.stat-excluded strong {
+  color: #d08770;
+}
+
+.badge-stat.stat-fulltext strong {
+  color: #b48ead;
+}
 """
 
 SOURCECERY_JS = """
@@ -620,6 +876,7 @@ def extract_pubmed_cache_from_corpus(corpus_dir, extra_pmids=None):
 
 NAV_PAGES = [
     ("synthesis", "synthesis.html", "Synthesis"),
+    ("ontology", "ontology.html", "Ontology"),
     ("gene-function", "gene-function.html", "Gene Function"),
     ("user-decisions", "user-decisions.html", "User Decisions"),
     ("ai-decisions", "ai-decisions.html", "AI Decisions"),
@@ -905,6 +1162,399 @@ def process_markdown_file(md_path, workspace_dir, gene_symbol, pmid_cache):
     return out_path
 
 
+def generate_ontology_markdown(workspace_path):
+    """Generate or update top-level ontology.md from workspace corpus data."""
+    ws = Path(workspace_path).resolve()
+    corpus_dir = ws / "corpus"
+    if not corpus_dir.exists():
+        return None
+
+    # Load context
+    ctx_file = corpus_dir / "context.json"
+    ctx = json.loads(ctx_file.read_text(encoding="utf-8")) if ctx_file.exists() else {}
+    gene = "Gene"
+    if ctx.get("genes") and ctx["genes"][0].get("symbol"):
+        gene = ctx["genes"][0]["symbol"]
+    phenotype = ctx.get("phenotype", "phenotype")
+    species = ctx.get("evidence_species", "human, mouse, rat")
+
+    # Load ontology definition
+    ont_file = corpus_dir / "ontology.json"
+    ont_data = json.loads(ont_file.read_text(encoding="utf-8")) if ont_file.exists() else {}
+    ont_concepts = ont_data.get("concepts", [])
+    if not ont_concepts and isinstance(ont_data, dict):
+        for cat, items in ont_data.items():
+            if isinstance(items, dict):
+                for name, terms in items.items():
+                    ont_concepts.append({
+                        "category": cat,
+                        "id": f"{cat}/{name}",
+                        "name": name,
+                        "terms": terms if isinstance(terms, list) else [terms],
+                    })
+
+    # Load latest run
+    runs_dir = corpus_dir / "runs"
+    runs = sorted(runs_dir.glob("*.json"), key=lambda p: p.stat().st_mtime) if runs_dir.exists() else []
+    run_data = json.loads(runs[-1].read_text(encoding="utf-8")) if runs else {}
+    run_id = run_data.get("run_id", "r1")
+    run_date = (run_data.get("created_at") or "2026-10-31")[:10]
+    searches = run_data.get("searches", {})
+
+    # Load fulltexts
+    fulltexts_file = corpus_dir / "fulltexts.jsonl"
+    fulltexts = []
+    fulltext_pmids = set()
+    if fulltexts_file.exists():
+        with open(fulltexts_file, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    ft = json.loads(line)
+                    fulltexts.append(ft)
+                    fulltext_pmids.add(str(ft.get("pmid")))
+
+    # Load articles
+    articles_file = corpus_dir / "articles.jsonl"
+    articles = {}
+    if articles_file.exists():
+        with open(articles_file, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    art = json.loads(line)
+                    articles[str(art.get("pmid"))] = art
+
+    # Load triage
+    triage_file = corpus_dir / "triage.jsonl"
+    triage_inc = defaultdict(int)
+    triage_exc = defaultdict(int)
+    if triage_file.exists():
+        with open(triage_file, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    t = json.loads(line)
+                    cid = t.get("concept_id") or "phenotype/direct"
+                    dec = t.get("effective_decision")
+                    if dec == "include":
+                        triage_inc[cid] += 1
+                    elif dec == "exclude":
+                        triage_exc[cid] += 1
+
+    # Load membership
+    mem_file = corpus_dir / "membership.jsonl"
+    concept_selected_pmids = defaultdict(set)
+    concept_all_pmids = defaultdict(set)
+    all_discovered_pmids = set()
+    if mem_file.exists():
+        with open(mem_file, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    m = json.loads(line)
+                    cid = m.get("concept_id") or "phenotype/direct"
+                    p = str(m.get("pmid"))
+                    all_discovered_pmids.add(p)
+                    concept_all_pmids[cid].add(p)
+                    if m.get("abstract_selected"):
+                        concept_selected_pmids[cid].add(p)
+
+    CATEGORY_ORDER = ["phenotype", "drug", "addiction", "brain", "function", "cell", "stress", "psychiatric"]
+    CATEGORY_TITLES = {
+        "phenotype": "Phenotype Lane (Direct Association)",
+        "drug": "Substances and Pharmacological Agents",
+        "addiction": "Addiction and Operant Behavior",
+        "brain": "Neuroanatomy and Neural Circuitry",
+        "function": "Channel Biophysics and Signaling Pathways",
+        "cell": "Cellular Populations and Subtypes",
+        "stress": "Stress and Neuroendocrine Reactivity",
+        "psychiatric": "Psychiatric and Behavioral Comorbidities",
+    }
+
+    # Group concept data
+    cats = defaultdict(list)
+    all_concepts_data = []
+
+    if searches:
+        for qid, s in searches.items():
+            conc = s.get("concept") or {}
+            cid = conc.get("id") or (conc.get("category", "") + "/" + conc.get("name", "")) or "phenotype/direct"
+            cname = conc.get("name") or cid
+            cat = conc.get("category") or s.get("lane") or "other"
+            cap = s.get("abstract_cap", 30)
+            count = s.get("count", 0)
+            selected_pmids = [str(p) for p in s.get("selected_pmids", [])]
+            terms = conc.get("search_terms") or conc.get("terms") or []
+
+            ft_matches = []
+            for pmid in fulltext_pmids:
+                if pmid in selected_pmids or pmid in concept_selected_pmids.get(cid, set()):
+                    art = articles.get(pmid, {})
+                    ft_matches.append({
+                        "pmid": pmid,
+                        "title": art.get("title", "Unknown Title"),
+                        "pmcid": next((f.get("pmcid", "") for f in fulltexts if str(f.get("pmid")) == pmid), ""),
+                    })
+
+            cdata = {
+                "id": cid,
+                "name": cname,
+                "category": cat,
+                "cap": cap,
+                "is_focused": (cap == 200),
+                "count": count,
+                "selected_count": len(selected_pmids),
+                "inc": triage_inc[cid],
+                "exc": triage_exc[cid],
+                "fulltexts": ft_matches,
+                "terms": terms,
+                "query": s.get("query", ""),
+            }
+            cats[cat].append(cdata)
+            all_concepts_data.append(cdata)
+    else:
+        for c in ont_concepts:
+            cid = c.get("id", "")
+            cat = c.get("category", "other")
+            cdata = {
+                "id": cid,
+                "name": c.get("name", cid),
+                "category": cat,
+                "cap": 30,
+                "is_focused": False,
+                "count": 0,
+                "selected_count": 0,
+                "inc": 0,
+                "exc": 0,
+                "fulltexts": [],
+                "terms": c.get("terms", []),
+                "query": "",
+            }
+            cats[cat].append(cdata)
+            all_concepts_data.append(cdata)
+
+    total_strata = len(all_concepts_data)
+    focused_concepts = [c for c in all_concepts_data if c["is_focused"]]
+    total_discovered = sum(c["count"] for c in all_concepts_data)
+    unique_discovered = len(all_discovered_pmids) if all_discovered_pmids else total_discovered
+    total_analyzed = len(articles) if articles else sum(c["selected_count"] for c in all_concepts_data)
+    total_inc = sum(triage_inc.values())
+    total_exc = sum(triage_exc.values())
+    total_ft = len(fulltexts)
+
+    # Build KPI HTML cards
+    kpi_html = f'''<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="kpi-value">{total_strata}</div>
+    <div class="kpi-label">Search Strata</div>
+    <div class="kpi-sub">50 ontology + 1 direct</div>
+  </div>
+  <div class="kpi-card kpi-focused">
+    <div class="kpi-value">{len(focused_concepts)}</div>
+    <div class="kpi-label">Focused Concepts</div>
+    <div class="kpi-sub">Elevated Cap: 200</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value">{total_discovered:,}</div>
+    <div class="kpi-label">Discovered Records</div>
+    <div class="kpi-sub">{unique_discovered:,} unique PMIDs</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value">{total_analyzed:,}</div>
+    <div class="kpi-label">Analyzed Abstracts</div>
+    <div class="kpi-sub">Peer-reviewed corpus</div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-value">{total_inc} / {total_exc}</div>
+    <div class="kpi-label">Triage Inclusions</div>
+    <div class="kpi-sub">Included / Excluded</div>
+  </div>
+  <div class="kpi-card kpi-fulltext">
+    <div class="kpi-value">{total_ft}</div>
+    <div class="kpi-label">Full-Text PMC</div>
+    <div class="kpi-sub">Retrieved & analyzed</div>
+  </div>
+</div>'''
+
+    # Build hierarchical tree branches
+    tree_branches = []
+    ordered_cats = [c for c in CATEGORY_ORDER if c in cats]
+    for c in sorted(cats.keys()):
+        if c not in ordered_cats:
+            ordered_cats.append(c)
+
+    for cat in ordered_cats:
+        clist = cats[cat]
+        # Sort: focused first, then by count descending, then by name
+        clist.sort(key=lambda x: (not x["is_focused"], -x["count"], x["name"]))
+
+        cat_title = CATEGORY_TITLES.get(cat, cat.replace("_", " ").title())
+        cat_discovered = sum(c["count"] for c in clist)
+        cat_analyzed = sum(c["selected_count"] for c in clist)
+        cat_inc = sum(c["inc"] for c in clist)
+        cat_exc = sum(c["exc"] for c in clist)
+        cat_ft = sum(len(c["fulltexts"]) for c in clist)
+        cat_focused = sum(1 for c in clist if c["is_focused"])
+
+        focused_badge_html = f'<span class="badge badge-focused">{cat_focused} focused</span>' if cat_focused > 0 else ""
+        ft_badge_html = f'<span class="badge badge-stat stat-fulltext">Full-text: <strong>{cat_ft}</strong></span>' if cat_ft > 0 else ""
+
+        leaf_nodes = []
+        for c in clist:
+            is_foc_cls = " is-focused" if c["is_focused"] else ""
+            badge_foc = (
+                '<span class="badge badge-focused">Focused (Cap 200)</span>'
+                if c["is_focused"]
+                else '<span class="badge badge-standard">Standard (Cap 30)</span>'
+            )
+            ft_leaf_badge = (
+                f'<span class="badge badge-stat stat-fulltext">Full-text: <strong>{len(c["fulltexts"])}</strong></span>'
+                if c["fulltexts"]
+                else ""
+            )
+
+            terms_str = ", ".join(c["terms"][:10]) if c["terms"] else "Direct query matching gene and phenotype"
+            if len(c["terms"]) > 10:
+                terms_str += f", ... (+{len(c['terms']) - 10} more)"
+
+            ft_list_html = ""
+            if c["fulltexts"]:
+                items = []
+                for ft in c["fulltexts"]:
+                    pmid_val = ft["pmid"]
+                    pmcid_val = f" ({ft['pmcid']})" if ft.get("pmcid") else ""
+                    t_val = ft["title"]
+                    items.append(
+                        f'<li><a class="pmid-link" data-pmid="{pmid_val}" href="https://pubmed.ncbi.nlm.nih.gov/{pmid_val}/" target="_blank">PMID {pmid_val}</a>{pmcid_val}: {t_val}</li>'
+                    )
+                ft_list_html = (
+                    f'<div class="tree-fulltexts">'
+                    f'<div class="tree-fulltexts-label">Full-Text PMC Articles ({len(c["fulltexts"])}):</div>'
+                    f'<ul>{" ".join(items)}</ul>'
+                    f'</div>'
+                )
+
+            leaf_html = f'''<div class="tree-leaf{is_foc_cls}">
+  <div class="tree-leaf-header">
+    <div class="tree-leaf-title">
+      <span>{c['name']}</span>
+      <code>{c['id']}</code>
+      {badge_foc}
+    </div>
+    <div class="tree-stats">
+      <span class="badge badge-stat">Cap: <strong>{c['cap']}</strong></span>
+      <span class="badge badge-stat">Discovered: <strong>{c['count']:,}</strong></span>
+      <span class="badge badge-stat">Analyzed: <strong>{c['selected_count']:,}</strong></span>
+      <span class="badge badge-stat stat-included">Inc: <strong>{c['inc']}</strong></span>
+      <span class="badge badge-stat stat-excluded">Exc: <strong>{c['exc']}</strong></span>
+      {ft_leaf_badge}
+    </div>
+  </div>
+  <div class="tree-terms"><strong>Search terms:</strong> {terms_str}</div>
+  {ft_list_html}
+</div>'''
+            leaf_nodes.append(leaf_html)
+
+        branch_html = f'''<details class="tree-branch" open>
+  <summary class="tree-summary">
+    <div class="tree-summary-left">
+      <span class="tree-arrow">&#9654;</span>
+      <span class="tree-category-name">{cat_title} ({cat})</span>
+      <span class="badge badge-stat">{len(clist)} concepts</span>
+      {focused_badge_html}
+    </div>
+    <div class="tree-summary-right">
+      <span class="badge badge-stat">Discovered: <strong>{cat_discovered:,}</strong></span>
+      <span class="badge badge-stat">Analyzed: <strong>{cat_analyzed:,}</strong></span>
+      <span class="badge badge-stat stat-included">Inc: <strong>{cat_inc}</strong></span>
+      <span class="badge badge-stat stat-excluded">Exc: <strong>{cat_exc}</strong></span>
+      {ft_badge_html}
+    </div>
+  </summary>
+  <div class="tree-branch-body">
+    {" ".join(leaf_nodes)}
+  </div>
+</details>'''
+        tree_branches.append(branch_html)
+
+    tree_html = f'''<div class="tree-container">
+{" ".join(tree_branches)}
+</div>'''
+
+    # Build reference table
+    table_rows = [
+        "| Category | Concept ID | Name | Priority | Cap | Discovered | Analyzed | Triage Inc | Triage Exc | Full-Text |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    sorted_for_table = sorted(all_concepts_data, key=lambda x: (x["category"], not x["is_focused"], -x["count"], x["name"]))
+    for c in sorted_for_table:
+        pri = "Focused" if c["is_focused"] else "Standard"
+        ft_cnt = len(c["fulltexts"])
+        table_rows.append(
+            f"| {c['category']} | `{c['id']}` | {c['name']} | {pri} | {c['cap']} | {c['count']:,} | {c['selected_count']:,} | {c['inc']} | {c['exc']} | {ft_cnt} |"
+        )
+
+    # Build full texts table
+    ft_rows = [
+        "| PMID | PMCID | Title | Journal (Year) | Mapped Concepts |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    pmid_to_concs = defaultdict(list)
+    for c in all_concepts_data:
+        for ft in c["fulltexts"]:
+            pmid_to_concs[ft["pmid"]].append(f"`{c['id']}`")
+
+    for ft in fulltexts:
+        p = str(ft.get("pmid"))
+        art = articles.get(p, {})
+        title = art.get("title", "Unknown")
+        pmcid = ft.get("pmcid", "N/A")
+        j = art.get("journal", "N/A")
+        y = (art.get("publication_date") or {}).get("Year", "N/A")
+        j_str = f"{j} ({y})" if y != "N/A" else j
+        concs_str = ", ".join(sorted(set(pmid_to_concs.get(p, [])))) or "none"
+        ft_rows.append(f"| [{p}](https://pubmed.ncbi.nlm.nih.gov/{p}/) | {pmcid} | {title} | {j_str} | {concs_str} |")
+
+    md_content = f'''# Literature Search Ontology and Corpus Structure
+
+Date: {run_date}  
+Workspace/run: {ws.name} ({run_id})  
+Gene: {gene} | Phenotype: {phenotype}  
+Search Strata: {total_strata} conceptual lanes ({total_strata - 1} ontology concepts + 1 direct phenotype query)  
+Scope: {species}  
+
+This document describes the structured search ontology, priority focus status, and literature corpus partitioning used to evaluate {gene} evidence in {phenotype}. PubMed queries were stratified into {total_strata} conceptual search strata across 8 biological categories.
+
+To prioritize pathways directly mediating nicotine reinforcement, mesolimbic circuit signaling, and calcium channel neuroplasticity, {len(focused_concepts)} priority concepts were focused with an elevated abstract cap of 200 abstracts per concept. Secondary, contextual, and comorbidity concepts operated under a standard cap of 30 abstracts per concept.
+
+{kpi_html}
+
+## Hierarchical Search Ontology Tree
+
+Click any category branch below to expand or collapse its concepts. Focused priority concepts are indicated with a gold badge and elevated abstract cap. Hover over any PMID link to inspect article metadata and abstracts.
+
+{tree_html}
+
+## Search Strata Reference Table
+
+The table below lists all {total_strata} search strata evaluated in this corpus, including priority status, abstract caps, total PubMed discovered hits, analyzed abstracts, and triage outcomes.
+
+{"\\n".join(table_rows)}
+
+## Analyzed Full-Text Corpus
+
+The table below lists the {len(fulltexts)} full-text PMC articles retrieved and analyzed in this workspace, along with the ontology concepts each article supports.
+
+{"\\n".join(ft_rows)}
+'''
+
+    # Ensure no em dashes or en dashes
+    for ch in ["\\u2014", "\\u2013"]:
+        if ch in md_content:
+            md_content = md_content.replace(ch, "-")
+
+    out_file = ws / "ontology.md"
+    out_file.write_text(md_content, encoding="utf-8")
+    return out_file
+
+
 def render_workspace_html(workspace_path):
     """Render all core workspace markdown files to interactive HTML."""
     ws = Path(workspace_path).resolve()
@@ -918,6 +1568,12 @@ def render_workspace_html(workspace_path):
                 gene_symbol = genes[0]["symbol"]
         except Exception:
             pass
+
+    # Generate or refresh ontology.md from corpus if available
+    try:
+        generate_ontology_markdown(ws)
+    except Exception as e:
+        sys.stderr.write(f"Notice: Could not generate ontology.md ({e}).\\n")
 
     # Collect any PMIDs mentioned across markdown files
     extra_pmids = set()

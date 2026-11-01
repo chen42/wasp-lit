@@ -167,6 +167,23 @@ class RenderHtmlTests(unittest.TestCase):
         ft_links = focused_leaf.find_all("a", class_="pmid-link")
         self.assertTrue(any(l.get("data-pmid") == "37047381" for l in ft_links))
 
+        # Verify branches are collapsed by default
+        branches = ont_soup.find_all("details", class_="tree-branch")
+        self.assertTrue(len(branches) > 0)
+        self.assertFalse(any(b.has_attr("open") for b in branches))
+
+        # Verify search strata and fulltext tables render as HTML tables (not unrendered markdown)
+        tables = ont_soup.find_all("table")
+        self.assertEqual(len(tables), 2)
+        strata_headers = [th.text for th in tables[0].find_all("th")]
+        self.assertIn("Category", strata_headers)
+        self.assertIn("Concept ID", strata_headers)
+        self.assertIn("Full-Text", strata_headers)
+
+        ft_headers = [th.text for th in tables[1].find_all("th")]
+        self.assertIn("PMID", ft_headers)
+        self.assertIn("Mapped Concepts", ft_headers)
+
     def test_detect_accurate_provenance_pi_dev(self):
         import os
         from render_html import detect_accurate_provenance

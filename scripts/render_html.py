@@ -437,6 +437,30 @@ hr {
   gap: 14px;
 }
 
+.tree-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.tree-toggle-btn {
+  background-color: var(--control-bg-color);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  padding: 5px 12px;
+  font-size: 0.82em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tree-toggle-btn:hover {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-color);
+  border-color: rgba(136, 192, 208, 0.4);
+}
+
 details.tree-branch {
   margin: 0;
   border: 1px solid var(--border-color);
@@ -1452,7 +1476,7 @@ def generate_ontology_markdown(workspace_path):
 </div>'''
             leaf_nodes.append(leaf_html)
 
-        branch_html = f'''<details class="tree-branch" open>
+        branch_html = f'''<details class="tree-branch">
   <summary class="tree-summary">
     <div class="tree-summary-left">
       <span class="tree-arrow">&#9654;</span>
@@ -1475,6 +1499,10 @@ def generate_ontology_markdown(workspace_path):
         tree_branches.append(branch_html)
 
     tree_html = f'''<div class="tree-container">
+<div class="tree-controls">
+  <button type="button" class="tree-toggle-btn" onclick="document.querySelectorAll('details.tree-branch').forEach(d => d.open = true);">Expand All</button>
+  <button type="button" class="tree-toggle-btn" onclick="document.querySelectorAll('details.tree-branch').forEach(d => d.open = false);">Collapse All</button>
+</div>
 {" ".join(tree_branches)}
 </div>'''
 
@@ -1490,6 +1518,7 @@ def generate_ontology_markdown(workspace_path):
         table_rows.append(
             f"| {c['category']} | `{c['id']}` | {c['name']} | {pri} | {c['cap']} | {c['count']:,} | {c['selected_count']:,} | {c['inc']} | {c['exc']} | {ft_cnt} |"
         )
+    table_md = "\n".join(table_rows)
 
     # Build full texts table
     ft_rows = [
@@ -1511,6 +1540,7 @@ def generate_ontology_markdown(workspace_path):
         j_str = f"{j} ({y})" if y != "N/A" else j
         concs_str = ", ".join(sorted(set(pmid_to_concs.get(p, [])))) or "none"
         ft_rows.append(f"| [{p}](https://pubmed.ncbi.nlm.nih.gov/{p}/) | {pmcid} | {title} | {j_str} | {concs_str} |")
+    ft_md = "\n".join(ft_rows)
 
     md_content = f'''# Literature Search Ontology and Corpus Structure
 
@@ -1536,13 +1566,13 @@ Click any category branch below to expand or collapse its concepts. Focused prio
 
 The table below lists all {total_strata} search strata evaluated in this corpus, including priority status, abstract caps, total PubMed discovered hits, analyzed abstracts, and triage outcomes.
 
-{"\\n".join(table_rows)}
+{table_md}
 
 ## Analyzed Full-Text Corpus
 
 The table below lists the {len(fulltexts)} full-text PMC articles retrieved and analyzed in this workspace, along with the ontology concepts each article supports.
 
-{"\\n".join(ft_rows)}
+{ft_md}
 '''
 
     # Ensure no em dashes or en dashes

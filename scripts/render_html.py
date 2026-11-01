@@ -29,6 +29,8 @@ SOURCECERY_NORD_CSS = """
   --accent-hover-color: #a3e8ff;
   --accent-bg-color: rgba(136, 192, 208, 0.14);
   --accent-bg-hover-color: rgba(136, 192, 208, 0.28);
+  --pmid-color: #81a1c1;
+  --pmid-hover-color: #88c0d0;
   --authoryear-color: #d8dee9;
   --authoryear-bg-color: #2e3440;
   --code-bg: #101217;
@@ -195,28 +197,28 @@ a:hover {
 
 /* PMID Links with Tooltip triggers */
 a.pmid-link {
-  display: inline-block;
-  color: var(--accent-color);
-  background-color: var(--accent-bg-color);
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.9em;
-  padding: 1px 6px;
-  margin: 1px 2px;
-  border-radius: 4px;
-  border: 1px solid rgba(136, 192, 208, 0.28);
+  display: inline;
+  color: var(--pmid-color);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
   font-weight: 500;
   text-decoration: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, text-decoration 0.15s ease;
 }
 
 a.pmid-link:hover {
-  background-color: var(--accent-bg-hover-color);
-  border-color: var(--accent-color);
-  color: #eceff4;
-  text-decoration: none;
-  box-shadow: 0 0 8px rgba(136, 192, 208, 0.35);
-  transform: translateY(-1px);
+  color: var(--pmid-hover-color);
+  text-decoration: underline;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transform: none;
 }
 
 /* Tables */

@@ -2,7 +2,8 @@
 
 Date: [date]<br>
 Workspace/run: [workspace and run ID]<br>
-Model: [LLM model name]
+[Harness: [harness name (only when accurately detected)]]<br>
+[Model: [LLM model name (only when accurately detected)]]
 
 ## Summary
 

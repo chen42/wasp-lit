@@ -98,6 +98,57 @@ class RenderHtmlTests(unittest.TestCase):
         self.assertIn("Structure and function of CaV1.2 calcium channels.", html_content)
         self.assertIn("Author A, ..., Author D", html_content)
 
+    def test_detect_accurate_provenance_pi_dev(self):
+        import os
+        from render_html import detect_accurate_provenance
+        # Simulate Pi.dev environment
+        with tempfile.TemporaryDirectory() as td:
+            pi_dir = Path(td)
+            sess_dir = pi_dir / ".pi" / "sessions"
+            sess_dir.mkdir(parents=True)
+            sess_file = sess_dir / "2026-10-31T10-00-00.jsonl"
+            sess_file.write_text(json.dumps({"type": "model_change", "provider": "openai-codex", "modelId": "gpt-6.1-sol"}) + "\n")
+            
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(pi_dir)
+                os.environ["PI_CODING_AGENT_DIR"] = "/tmp/fake-pi"
+                # Clear other harness vars if set
+                saved = {k: os.environ.pop(k, None) for k in ("ANTIGRAVITY_AGENT", "ANTIGRAVITY_APP_DATA_DIR", "CLAUDE_CODE", "WASP_HARNESS")}
+                try:
+                    prov = detect_accurate_provenance()
+                    self.assertEqual(prov["harness"], "Pi.dev")
+                    self.assertEqual(prov["model"], "gpt-6.1-sol (openai-codex)")
+                finally:
+                    for k, v in saved.items():
+                        if v is not None:
+                            os.environ[k] = v
+            finally:
+                os.chdir(old_cwd)
+                os.environ.pop("PI_CODING_AGENT_DIR", None)
+
+    def test_detect_accurate_provenance_unknown_environment(self):
+        import os
+        from render_html import detect_accurate_provenance
+        with tempfile.TemporaryDirectory() as td:
+            saved = {k: os.environ.pop(k, None) for k in (
+                "ANTIGRAVITY_AGENT", "ANTIGRAVITY_APP_DATA_DIR", "CLAUDE_CODE", 
+                "WASP_HARNESS", "WASP_LLM_MODEL", "LLM_MODEL", "MODEL_NAME", 
+                "AGENT_MODEL", "PI_CODING_AGENT_DIR", "OLLAMA_MODEL", "OLLAMA_HOST"
+            )}
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(td)
+                prov = detect_accurate_provenance()
+                # Should not invent guesses
+                self.assertIsNone(prov["harness"])
+                self.assertIsNone(prov["model"])
+            finally:
+                os.chdir(old_cwd)
+                for k, v in saved.items():
+                    if v is not None:
+                        os.environ[k] = v
+
 
 if __name__ == "__main__":
     unittest.main()

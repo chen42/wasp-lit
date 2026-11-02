@@ -46,7 +46,7 @@ wasp-lit/
 ├── agents/               # concept-screener subagent definition
 ├── references/           # Workflow, search, screening, full-text, corpus, and runbook guides
 ├── resources/            # Curated addiction keyword ontology (current and legacy)
-├── scripts/              # wasp.py CLI, core library, PubMed, WikiGenes, GWAS Catalog, and Jev triage helpers
+├── scripts/              # wasp.py CLI, core library, PubMed, WikiGenes, GWAS Catalog, Jev triage, and OKF export helpers
 ├── templates/            # Context example, search record, concept domains, synthesis
 ├── synthesis_prompt.txt  # Candidate-gene synthesis prompt
 ├── addiction_ontology.json # Original GeneCup ontology (unchanged; checked by tests)
@@ -66,6 +66,9 @@ wasp-lit-<gene>-<phenotype>/
 ├── ai-decisions.md            # AI concept-cap rationale, Jev triage summary, and subagent screening ledger
 ├── gene-function.md           # Baseline gene/protein biology (or gene-function/<GENE>.md for multi-gene runs)
 ├── gwas-associations.md       # Human-readable GWAS Catalog summary table
+├── okf/                       # Google Open Knowledge Format concept documents for screened-in references
+│   ├── index.md               # Progressive disclosure catalog of references passing screening
+│   └── <PMID>.md              # Self-describing reference concept documents (YAML frontmatter + abstract + evidence)
 └── corpus/                    # Machine state and immutable source cache
     ├── manifest.json, context.json, ontology.json, queries.json
     ├── overview.json, audit.json

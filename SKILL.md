@@ -86,6 +86,7 @@ Resolve script paths relative to this skill directory. The [runbook](references/
 - `phenotype-search`: resolve a trait name, ID, or saved MCP capture to an ontology ID.
 - `associations`: page the GWAS Catalog over MCP, retain gene-trait associations in `corpus/`, and render `gwas-associations.md`.
 - `association-report`: report the retained associations for a run with their variants, studies and PMIDs.
+- `okf`, `export-okf`: export references passing screening into Google Open Knowledge Format Markdown files under `okf/` (with `index.md`).
 - `audit`: check source integrity, membership, record hashes, quotations, and Markdown portability.
 - `scripts/wikigenes.py`: retrieve function-related WikiGenes sections for human, mouse and rat; see `references/wikigenes.md` and `references/gene-function-context.md`.
 

@@ -1673,6 +1673,13 @@ class Store:
         else:
             inc_lines.append("| none | none | none | none | none | none | none | No included records yet | none |")
 
+        okf_note_lines = []
+        if (self.root / "okf" / "index.md").exists():
+            okf_note_lines = [
+                "All references passing screening are exported as structured concept documents in the [Open Knowledge Format index](./okf/index.md).",
+                "",
+            ]
+
         rev_lines = [
             "| PMID | Gene | Concept | Gene Identity | Concept Support | Finding | Reason |",
             "| --- | --- | --- | --- | --- | --- | --- |",
@@ -1735,6 +1742,7 @@ class Store:
             "",
             f"### Included Records ({len(included)})",
             "",
+            *okf_note_lines,
             *inc_lines,
             "",
             f"### Records Flagged for Review ({len(needs_review)})",
@@ -1827,17 +1835,23 @@ class Store:
         rel_context = self.rel(self.base / "context.json")
         rel_overview = self.rel(self.base / "overview.json")
         rel_queries = self.rel(self.base / "queries.json")
-        content = "\n".join([
-            f"# wasp-lit Workspace: {genes_label} and {context.get('phenotype')}",
-            "",
-            "## Top-Level Human-Readable Documents",
-            "",
+        top_docs = [
             "- [Evidence synthesis](./synthesis.md): Narrative synthesis integrating baseline gene biology, GWAS associations, and screened PubMed evidence.",
             "- [Literature search ontology](./ontology.md): Hierarchical search ontology, priority focus status, abstract caps, and full-text corpus mapping.",
             "- [User decision log](./user-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
             "- [AI decision and screening log](./ai-decisions.md): AI concept-prioritization rationale, Jev triage summary, and per-PMID subagent screening tables.",
             "- [Baseline gene function summary](./gene-function.md): Baseline molecular, expression, and structural context.",
             "- [GWAS association summary](./gwas-associations.md): Human GWAS Catalog variant and trait summary (when GWAS enrichment is run).",
+        ]
+        if (self.root / "okf" / "index.md").exists():
+            top_docs.append("- [Open Knowledge Format reference index](./okf/index.md): Google Open Knowledge Format concept bundle of references passing screening.")
+
+        content = "\n".join([
+            f"# wasp-lit Workspace: {genes_label} and {context.get('phenotype')}",
+            "",
+            "## Top-Level Human-Readable Documents",
+            "",
+            *top_docs,
             "",
             "## Corpus Summary",
             "",
@@ -1869,6 +1883,11 @@ class Store:
         """Render workspace Markdown documents (synthesis, gene-function, decisions, etc.) to interactive HTML."""
         from render_html import render_workspace_html
         return render_workspace_html(self.root)
+
+    def render_okf(self):
+        """Export references passing screening to Google Open Knowledge Format files under okf/."""
+        from okf_export import export_okf
+        return export_okf(self)
 
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
@@ -1930,6 +1949,7 @@ class Store:
         atomic(self.base / "overview.json", value)
         self.render_readme(value)
         self.render_ai_decisions(value)
+        self.render_okf()
         return value
 
     def packet(self, pmids=None, gene=None, concept_id=None, limit=10):

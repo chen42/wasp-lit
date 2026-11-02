@@ -121,6 +121,16 @@ python3 "$SKILL/scripts/wasp.py" audit "$PROJECT"
 
 Full-text acquisition prioritizes exact target-phenotype and target-drug concepts, then direct phenotype relevance in other concept domains, then indirect relevance. It orders by PubMed `pub_date` within each group and tries NCBI `efetch db=pmc` first, followed by Europe PMC and PMC BioC, under the run-wide quota. License, figure and supplement checks remain explicit. `packet` contains complete abstracts and references to retained full texts. Read section-aware slices of full text when answering, not just an earlier summary.
 
+## Open Knowledge Format export
+
+Export references passing systematic screening into Google Open Knowledge Format Markdown concept documents:
+
+```bash
+python3 "$SKILL/scripts/wasp.py" okf "$PROJECT"
+```
+
+This populates the `$PROJECT/okf/` directory with an `index.md` progressive disclosure catalog and individual `<PMID>.md` concept documents conforming to the [Google Open Knowledge Format specification](https://github.com/GoogleCloudPlatform/open-knowledge-format). Each file contains structured YAML frontmatter (`type: Reference`), bibliographic metadata, screening evidence assessments, abstract text, and retrieval provenance.
+
 ## Genetic association lane
 
 Read [associations](../references/associations.md) first. The Catalog uses human HGNC symbols, so a non-human reference organism needs `--cross-species-transfer`, which marks every affected row.

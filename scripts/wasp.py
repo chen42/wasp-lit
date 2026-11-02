@@ -142,7 +142,8 @@ def parser():
                          help="Optional installed agent copy path (defaults to ~/.pi/agent/agents/concept-screener.md when present, otherwise canonical)")
     for name in ("init", "plan-search", "collect", "jobs", "evidence-validate", "evidence-import",
                  "evidence-record", "triage", "triage-report", "human-decision", "user-decision", "packet", "fulltext", "audit",
-                 "status", "acknowledge-license", "phenotype-search", "associations", "association-report", "render-html"):
+                 "status", "acknowledge-license", "phenotype-search", "associations", "association-report", "render-html",
+                 "okf", "export-okf"):
         command = commands.add_parser(name)
         command.add_argument("workspace")
         if name == "init":
@@ -444,6 +445,8 @@ def main(argv=None):
                     "run_path": str(store.base / "runs" / (args.run_id + ".json"))}
         if args.command == "render-html":
             return store.render_html()
+        if args.command in ("okf", "export-okf"):
+            return store.render_okf()
         if args.command == "audit":
             value = store.audit()
             atomic(store.base / "audit.json", value)

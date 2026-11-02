@@ -66,9 +66,11 @@ wasp-lit-<gene>-<phenotype>/
 ├── ai-decisions.md            # AI concept-cap rationale, Jev triage summary, and subagent screening ledger
 ├── gene-function.md           # Baseline gene/protein biology (or gene-function/<GENE>.md for multi-gene runs)
 ├── gwas-associations.md       # Human-readable GWAS Catalog summary table
-├── okf/                       # Google Open Knowledge Format concept documents for screened-in references
-│   ├── index.md               # Progressive disclosure catalog of references passing screening
-│   └── <PMID>.md              # Self-describing reference concept documents (YAML frontmatter + abstract + evidence)
+├── okf.html                   # Interactive OKF tab with Obsidian-style Cytoscape.js graph and side-panel reader
+├── okf/                       # Two-tier Google Open Knowledge Format knowledge network (after user confirmation)
+│   ├── index.md               # Top-level ontology and emerging topics catalog (also rendered as index.html)
+│   ├── concepts/<SLUG>.md     # Focused Concept Mini-Reviews and Emerging Topic Mini-Reviews (type: Concept)
+│   └── <PMID>.md              # Atomic Reference Notes for confirmed included studies (type: Reference)
 └── corpus/                    # Machine state and immutable source cache
     ├── manifest.json, context.json, ontology.json, queries.json
     ├── overview.json, audit.json

@@ -143,9 +143,19 @@ def parser():
     for name in ("init", "plan-search", "collect", "jobs", "evidence-validate", "evidence-import",
                  "evidence-record", "triage", "triage-report", "human-decision", "user-decision", "packet", "fulltext", "audit",
                  "status", "acknowledge-license", "phenotype-search", "associations", "association-report", "render-html",
-                 "okf", "export-okf"):
+                 "okf", "export-okf", "okf-topic"):
         command = commands.add_parser(name)
         command.add_argument("workspace")
+        if name in ("okf", "export-okf"):
+            command.add_argument("--confirm", action="store_true",
+                                 help="Record user confirmation for OKF export in user-decisions.md")
+        if name == "okf-topic":
+            command.add_argument("--id", required=True, help="Emerging topic slug or ID (e.g., calcium-plasticity)")
+            command.add_argument("--title", required=True, help="Display title for the emerging topic mini-review")
+            command.add_argument("--pmids", required=True, help="Comma-separated PMIDs supporting this emerging topic")
+            command.add_argument("--narrative", required=True, help="Focused narrative mini-review prose for this topic")
+            command.add_argument("--direction", help="Optional primary direction of effect")
+            command.add_argument("--species", help="Optional comma-separated species")
         if name == "init":
             command.add_argument("--context", required=True)
             command.add_argument("--ontology", default=str(SKILL_ROOT / "resources/addiction_ontology.json"))
@@ -446,7 +456,18 @@ def main(argv=None):
         if args.command == "render-html":
             return store.render_html()
         if args.command in ("okf", "export-okf"):
-            return store.render_okf()
+            return store.render_okf(confirm=args.confirm)
+        if args.command == "okf-topic":
+            pmids_list = [p.strip() for p in args.pmids.split(",") if p.strip()]
+            sp_list = [s.strip() for s in args.species.split(",") if s.strip()] if args.species else None
+            return store.record_okf_topic(
+                args.id,
+                args.title,
+                pmids_list,
+                args.narrative,
+                direction=args.direction,
+                species=sp_list,
+            )
         if args.command == "audit":
             value = store.audit()
             atomic(store.base / "audit.json", value)

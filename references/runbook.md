@@ -123,13 +123,25 @@ Full-text acquisition prioritizes exact target-phenotype and target-drug concept
 
 ## Open Knowledge Format export
 
-Export references passing systematic screening into Google Open Knowledge Format Markdown concept documents:
+After asking the user for confirmation, export confirmed `include` references (from subagent screening or human override) and focused mini-reviews into Google Open Knowledge Format Markdown documents and render the interactive HTML tab:
 
 ```bash
-python3 "$SKILL/scripts/wasp.py" okf "$PROJECT"
+# Optional: record custom narrative mini-reviews for emerging cross-domain themes
+python3 "$SKILL/scripts/wasp.py" okf-topic "$PROJECT" \
+  --id "striatal-plasticity" \
+  --title "Striatal Immediate-Early Gene Plasticity" \
+  --pmids "29384712,30192834" \
+  --narrative "Focused synthesis of emerging non-ontology theme..."
+
+# Export two-tier OKF knowledge network with human confirmation and render HTML
+python3 "$SKILL/scripts/wasp.py" okf "$PROJECT" --confirm
+python3 "$SKILL/scripts/wasp.py" render-html "$PROJECT"
 ```
 
-This populates the `$PROJECT/okf/` directory with an `index.md` progressive disclosure catalog and individual `<PMID>.md` concept documents conforming to the [Google Open Knowledge Format specification](https://github.com/GoogleCloudPlatform/open-knowledge-format). Each file contains structured YAML frontmatter (`type: Reference`), bibliographic metadata, screening evidence assessments, abstract text, and retrieval provenance.
+This populates `$PROJECT/okf/` with:
+- `okf/concepts/<category>--<slug>.md` (`type: Concept`): Focused Mini-Reviews for each active ontology concept and for Emerging Topics (`category: emerging`, colored `#ff79c6` in Cytoscape) that synthesize direction of effect, species concordance, study designs, verbatim quotes, and cross-concept links.
+- `okf/<PMID>.md` (`type: Reference`): Atomic Reference Notes with bibliographic YAML frontmatter, screening assessments, verbatim quotes, and backlinks to Mini-Reviews.
+- `okf/index.md` (`type: Index`, rendered to `okf.html` and `okf/index.html`): Top-level ontology and emerging topics catalog with an embedded Obsidian-style Cytoscape.js graph visualizer and side-panel note reader.
 
 ## Genetic association lane
 

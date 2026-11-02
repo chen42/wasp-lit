@@ -86,7 +86,8 @@ Resolve script paths relative to this skill directory. The [runbook](references/
 - `phenotype-search`: resolve a trait name, ID, or saved MCP capture to an ontology ID.
 - `associations`: page the GWAS Catalog over MCP, retain gene-trait associations in `corpus/`, and render `gwas-associations.md`.
 - `association-report`: report the retained associations for a run with their variants, studies and PMIDs.
-- `okf`, `export-okf`: export references passing screening into Google Open Knowledge Format Markdown files under `okf/` (with `index.md`).
+- `okf`, `export-okf`: after user confirmation (`--confirm`), export strictly confirmed `include` references (subagent or human override) into a two-tier Google Open Knowledge Format network under `okf/` (`okf/concepts/<slug>.md` for Ontology Concept and Emerging Topic Mini-Reviews, `okf/<PMID>.md` for Atomic Reference Notes, `okf/index.md` catalog, and `corpus/okf_graph.json` for the Cytoscape.js HTML tab `okf.html`).
+- `okf-topic`: record a custom Emerging Topic Mini-Review (`category: emerging`, colored `#ff79c6` in the Cytoscape graph) for themes emerging outside the fixed ontology.
 - `audit`: check source integrity, membership, record hashes, quotations, and Markdown portability.
 - `scripts/wikigenes.py`: retrieve function-related WikiGenes sections for human, mouse and rat; see `references/wikigenes.md` and `references/gene-function-context.md`.
 

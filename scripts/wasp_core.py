@@ -1884,10 +1884,18 @@ class Store:
         from render_html import render_workspace_html
         return render_workspace_html(self.root)
 
-    def render_okf(self):
-        """Export references passing screening to Google Open Knowledge Format files under okf/."""
+    def render_okf(self, confirm=False):
+        """Export confirmed references and mini-reviews to Google Open Knowledge Format files under okf/."""
         from okf_export import export_okf
-        return export_okf(self)
+        return export_okf(self, confirm=confirm)
+
+    def record_okf_topic(self, topic_id, title, pmids, narrative, direction=None, species=None):
+        """Record an emerging topic mini-review and refresh okf/ if already initialized."""
+        from okf_export import record_emerging_topic, export_okf
+        entry = record_emerging_topic(self, topic_id, title, pmids, narrative, direction=direction, species=species)
+        if (self.root / "okf" / "index.md").exists():
+            export_okf(self)
+        return entry
 
     def overview(self):
         runs = [load(path) for path in sorted((self.base / "runs").glob("*.json"))] if (self.base / "runs").exists() else []
@@ -1947,9 +1955,11 @@ class Store:
                  "runs": [{"run_id": r["run_id"], "status": r["status"], "missing_records": r.get("missing_records", []),
                            "strata": [coverage(r, q) for q in r["searches"].values()]} for r in runs]}
         atomic(self.base / "overview.json", value)
+        from okf_export import is_okf_confirmed
+        if is_okf_confirmed(self) or (self.root / "okf" / "index.md").exists():
+            self.render_okf()
         self.render_readme(value)
         self.render_ai_decisions(value)
-        self.render_okf()
         return value
 
     def packet(self, pmids=None, gene=None, concept_id=None, limit=10):

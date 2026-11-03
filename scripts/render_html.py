@@ -21,11 +21,14 @@ _WASP_ICON_DATA_URI_CACHE = None
 
 
 def _get_wasp_icon_data_uri() -> str:
-    """Return a compact 64x64 JPEG base64 data URI for the wasp-lit navbar icon."""
+    """Return a compact 64x64 JPEG base64 data URI for the wasp-lit navbar icon (preferring wasp-dark.png)."""
     global _WASP_ICON_DATA_URI_CACHE
     if _WASP_ICON_DATA_URI_CACHE:
         return _WASP_ICON_DATA_URI_CACHE
-    icon_path = Path(__file__).resolve().parent.parent / "assets" / "wasp-lib.jpg"
+    assets_dir = Path(__file__).resolve().parent.parent / "assets"
+    icon_path = assets_dir / "wasp-dark.png"
+    if not icon_path.exists():
+        icon_path = assets_dir / "wasp-lib.jpg"
     if icon_path.exists():
         try:
             from PIL import Image
@@ -38,8 +41,9 @@ def _get_wasp_icon_data_uri() -> str:
             return _WASP_ICON_DATA_URI_CACHE
         except Exception:
             try:
+                mime = "image/png" if icon_path.suffix.lower() == ".png" else "image/jpeg"
                 b64 = base64.b64encode(icon_path.read_bytes()).decode("ascii")
-                _WASP_ICON_DATA_URI_CACHE = f"data:image/jpeg;base64,{b64}"
+                _WASP_ICON_DATA_URI_CACHE = f"data:{mime};base64,{b64}"
                 return _WASP_ICON_DATA_URI_CACHE
             except Exception:
                 pass
@@ -1578,33 +1582,34 @@ def process_markdown_file(
                 a["class"] = classes
 
     # 3. Detect and tag PMIDs in text nodes (e.g. table cells, lists)
-    # Check if number is in pmid_cache or in a PMID table column
-    for text_node in list(soup.find_all(string=True)):
-        if text_node.parent.name in ("a", "code", "pre", "script", "style", "h1"):
-            continue
-        # Find 7-8 digit integers
-        matches = list(re.finditer(r"\b(\d{7,8})\b", str(text_node)))
-        if not matches:
-            continue
+    # Check if number is in pmid_cache or in a PMID table column (skip on atomic reference notes where all PMIDs are already linked)
+    if not md_path.stem.isdigit():
+        for text_node in list(soup.find_all(string=True)):
+            if text_node.parent.name in ("a", "code", "pre", "script", "style", "h1"):
+                continue
+            # Find 7-8 digit integers
+            matches = list(re.finditer(r"\b(\d{7,8})\b", str(text_node)))
+            if not matches:
+                continue
 
-        # Replace matching PMIDs with links
-        def _replace_pmid(match):
-            val = match.group(1)
-            # If it's a known PMID or parent is a table cell in a PMID column
-            is_pmid = val in pmid_cache
-            if not is_pmid:
-                # Check context (e.g. text mentions 'PMID' nearby or inside table)
-                parent = text_node.parent
-                if parent.name in ("td", "th", "li", "p") and ("pmid" in str(parent).lower() or "abstract" in str(parent).lower()):
-                    is_pmid = True
-            if is_pmid:
-                return f'<a class="pmid-link" data-pmid="{val}" href="https://pubmed.ncbi.nlm.nih.gov/{val}/" target="_blank">{val}</a>'
-            return val
+            # Replace matching PMIDs with links
+            def _replace_pmid(match):
+                val = match.group(1)
+                # If it's a known PMID or parent is a table cell in a PMID column
+                is_pmid = val in pmid_cache
+                if not is_pmid:
+                    # Check context (e.g. text mentions 'PMID' nearby or inside table)
+                    parent = text_node.parent
+                    if parent.name in ("td", "th", "li", "p") and ("pmid" in str(parent).lower() or "abstract" in str(parent).lower()):
+                        is_pmid = True
+                if is_pmid:
+                    return f'<a class="pmid-link" data-pmid="{val}" href="https://pubmed.ncbi.nlm.nih.gov/{val}/" target="_blank">{val}</a>'
+                return val
 
-        new_text = re.sub(r"\b(\d{7,8})\b", _replace_pmid, str(text_node))
-        if new_text != str(text_node):
-            new_soup = BeautifulSoup(new_text, "html.parser")
-            text_node.replace_with(new_soup)
+            new_text = re.sub(r"\b(\d{7,8})\b", _replace_pmid, str(text_node))
+            if new_text != str(text_node):
+                new_soup = BeautifulSoup(new_text, "html.parser")
+                text_node.replace_with(new_soup)
 
     active_key = active_key_override or md_path.stem
     title = f"{gene_symbol} - {active_key.replace('-', ' ').title()}"

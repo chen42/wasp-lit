@@ -309,6 +309,8 @@ def enumerate_pmids(search, query, cap=200, uid_limit=UID_LIMIT, max_requests=20
 def _md_cell(value):
     if value is None:
         return "none"
+    if isinstance(value, (list, tuple)):
+        value = ", ".join(str(x) for x in value if x is not None)
     text = re.sub(r"\s+", " ", str(value)).strip()
     if not text:
         return "none"
@@ -1608,8 +1610,18 @@ class Store:
             "<!-- AI-RATIONALE-END -->",
             default_rationale,
         )
-        priority_queries = [q for q in queries if q.get("lane") == "contextual" and q.get("concept_priority") != "other"]
-        scan_queries = [q for q in queries if q.get("lane") == "contextual" and q.get("concept_priority") == "other"]
+        priority_set = set(context.get("concept_ids") or [])
+        include_all_flag = bool(context.get("include_all_concepts"))
+        def _is_scan_query(q):
+            if q.get("lane") != "contextual":
+                return False
+            if q.get("concept_priority") == "other":
+                return True
+            cid = (q.get("concept") or {}).get("id") or q.get("concept_id")
+            return bool(include_all_flag and priority_set and cid and cid not in priority_set)
+
+        priority_queries = [q for q in queries if q.get("lane") == "contextual" and not _is_scan_query(q)]
+        scan_queries = [q for q in queries if _is_scan_query(q)]
         direct_queries = [q for q in queries if q.get("lane") == "direct"]
 
         triage_rows = self.table("triage")

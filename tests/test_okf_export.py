@@ -221,9 +221,11 @@ class TestOkfExport(unittest.TestCase):
         self.assertIn("30192834.md", drug_mr_text)
         self.assertIn("brain/nucleus_accumbens", drug_mr_text)
 
-        # Check index.md species counts format
+        # Check index.md species counts format and unified category table with Mechanistic Overlap / Synthesis Summary
         idx_text = (self.ws / "okf" / "index.md").read_text(encoding="utf-8")
         self.assertIn("rat (1), mouse (1)", idx_text)
+        self.assertIn("Mechanistic Overlap / Synthesis Summary", idx_text)
+        self.assertNotIn("## Gene-Phenotype Mechanistic Overlap (Candidate Points of Interaction)", idx_text)
 
         # Check Emerging Topic Review content (written as a small review article, not Relationships in Context)
         em_mr = self.ws / "okf" / "concepts" / "emerging--striatal-cfos-plasticity.md"

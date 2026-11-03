@@ -174,12 +174,19 @@ def _sanitize_prose(text: str) -> str:
 
 
 def _clean_finding_text(text: Any, concept_id: str = "") -> str:
-    """Strip boilerplate 'nicotine self-administration was not studied' disclaimers from non-nicotine findings."""
+    """Strip structured-abstract headers and boilerplate disclaimers from extracted findings."""
     if text is None:
         return ""
     s = _sanitize_prose(str(text).strip())
     if not s:
         return ""
+    # Strip leading structured abstract section headers (e.g. OBJECTIVE:, BACKGROUND AND OBJECTIVES:, RESULTS:)
+    s = re.sub(
+        r"^(?:BACKGROUND\s+AND\s+OBJECTIVES?|OBJECTIVES?|BACKGROUND|INTRODUCTION|AIMS?|PURPOSE|METHODS?|RESULTS?|CONCLUSIONS?|SIGNIFICANCE|IMPORTANCE|FINDINGS?)\s*:\s*",
+        "",
+        s,
+        flags=re.IGNORECASE,
+    ).strip()
     cid_lower = str(concept_id or "").strip().lower()
     if cid_lower != "drug/nicotine":
         s = re.sub(r";\s*[^;]*\b(?:nicotine|tobacco)\b[^.]*\.?$", ".", s, flags=re.IGNORECASE)
@@ -978,6 +985,7 @@ def _synthesize_emerging_mini_review_article(
     articles_by_pmid: dict[str, dict[str, Any]],
     custom_narrative: str = "",
     rel_prefix_to_pmid: str = "..",
+    primary_gene: str = "CACNA1C",
 ) -> str:
     """Write an emerging topic mini-review as a cohesive multi-paragraph review article with inline PMID citations.
 
@@ -989,6 +997,8 @@ def _synthesize_emerging_mini_review_article(
 
     unique_pmids = sorted({str(a["pmid"]) for a in dedup_assessments}, key=lambda x: int(x) if x.isdigit() else x)
     sp_summary = format_species_counts(dedup_assessments)
+    gene_disp = _gene_display_label(primary_gene)
+    is_cav12 = primary_gene.upper() == "CACNA1C"
 
     # Convert any raw (PMID:12345678) or PMID 12345678 in custom_narrative into clickable links
     def _linkify_pmids_in_prose(text: str) -> str:
@@ -1034,7 +1044,7 @@ def _synthesize_emerging_mini_review_article(
             "basal `CACNA1C` mRNA levels remain unchanged, and polygenic risk across calcium channel subunits converges on "
             "shared clinical phenotypes."
         )
-    elif "cre" in title_lower or "pv" in title_lower or "cell-type" in title_lower:
+    elif ("cre" in title_lower or "pv" in title_lower or "cell-type" in title_lower) and is_cav12:
         p1 = (
             f"**General Commonality Across the Corpus**: Across {len(unique_pmids)} screened studies ({sp_summary}), "
             "conditional genetic deletion of `Cacna1c` using untracked cell-type-specific Cre recombinase drivers "
@@ -1052,16 +1062,16 @@ def _synthesize_emerging_mini_review_article(
     else:
         p1 = (
             f"**General Commonality Across the Corpus**: Across {len(unique_pmids)} screened studies ({sp_summary}), "
-            f"**{concept_title}** emerges as a cross-cutting mechanistic theme linking `CACNA1C` (CaV1.2) function across "
+            f"**{concept_title}** emerges as a cross-cutting mechanistic theme linking {gene_disp} function across "
             "multiple experimental domains that are otherwise separated in the primary ontology."
         )
     paragraphs.append(p1)
 
     # 2. Group the studies into thematic context paragraphs (nuanced experimental differences), one entry per PMID
-    inc_studies: list[tuple[str, str]] = []
-    dec_studies: list[tuple[str, str]] = []
-    null_or_dissoc_studies: list[tuple[str, str]] = []
-    state_or_mod_studies: list[tuple[str, str]] = []
+    inc_studies: list[tuple[str, str, str]] = []
+    dec_studies: list[tuple[str, str, str]] = []
+    null_or_dissoc_studies: list[tuple[str, str, str]] = []
+    state_or_mod_studies: list[tuple[str, str, str]] = []
 
     best_by_pmid: dict[str, dict[str, Any]] = {}
     for a in dedup_assessments:
@@ -1075,7 +1085,7 @@ def _synthesize_emerging_mini_review_article(
 
     for p in sorted(best_by_pmid.keys(), key=lambda x: int(x) if x.isdigit() else x):
         a = best_by_pmid[p]
-        info = _infer_relationship_in_context(a, concept_title, "emerging")
+        info = _infer_relationship_in_context(a, concept_title, "emerging", primary_gene=primary_gene)
         clean_f = _clean_finding_text(a.get("finding") or "", "emerging").rstrip(".")
         clean_f = re.sub(
             r"^(?:this\s+review\s+summarizes\s+(?:how\s+)?|review\s+(?:discussing|summarizing|of|stating\s+that|noting\s+that)\s+(?:how\s+)?|reviews\s+|reports\s+that\s+|shows\s+that\s+|evaluated\s+)",
@@ -1132,15 +1142,34 @@ def _synthesize_emerging_mini_review_article(
     total_studies = len(best_by_pmid)
     max_det = 5 if total_studies <= 15 else (4 if total_studies <= 28 else 3)
 
+    inc_lead = (
+        "**Contexts Demonstrating Upregulation or Potentiated Signaling**: "
+        "In experimental paradigms examining activity-dependent potentiation, chronic drug withdrawal, or pathological "
+        f"upregulation, multiple studies document heightened {'CaV1.2' if is_cav12 else gene_disp} expression or downstream effector coupling."
+    )
+    dec_lead = (
+        "**Contexts Demonstrating Downregulation, Loss-of-Function Attenuation, or Pharmacological Blockade**: "
+        f"Conversely, under genetic deletion, knockdown, or pharmacological {'L-type channel antagonism' if is_cav12 else f'modulation of {gene_disp} and its substrates'} across distinct "
+        "anatomical and developmental contexts, studies report selective attenuation of downstream signaling and behavior."
+    )
+    state_lead = (
+        "**Nuanced State-Dependent, Isoform-Specific, and Polygenic Contexts**: "
+        f"Several investigations further show that the direction and magnitude of {'CaV1.2' if is_cav12 else gene_disp} involvement depend critically "
+        "on abstinence duration, brain region, developmental stage, or genetic background."
+    )
+    null_lead = (
+        "**Functional Dissociations and Negative Controls**: "
+        f"Finally, explicit dissociation experiments define the boundary conditions where {'CaV1.2' if is_cav12 else gene_disp} is dispensable or "
+        "diverges from parallel pathways."
+    )
+
     for use_short in (False, True):
         for det_try in range(max_det, 0, -1):
             candidate_paragraphs = [p1]
             if inc_studies:
                 candidate_paragraphs.append(
                     _build_section_paragraph(
-                        "**Contexts Demonstrating Upregulation or Potentiated Signaling**: "
-                        "In experimental paradigms examining activity-dependent potentiation, chronic drug withdrawal, or pathological "
-                        "upregulation, multiple studies document heightened CaV1.2 expression or downstream effector coupling.",
+                        inc_lead,
                         inc_studies,
                         det_try,
                         use_short,
@@ -1149,9 +1178,7 @@ def _synthesize_emerging_mini_review_article(
             if dec_studies:
                 candidate_paragraphs.append(
                     _build_section_paragraph(
-                        "**Contexts Demonstrating Downregulation, Loss-of-Function Attenuation, or Pharmacological Blockade**: "
-                        "Conversely, under genetic deletion, knockdown, or pharmacological L-type channel antagonism across distinct "
-                        "anatomical and developmental contexts, studies report selective attenuation of downstream signaling and behavior.",
+                        dec_lead,
                         dec_studies,
                         det_try,
                         use_short,
@@ -1160,9 +1187,7 @@ def _synthesize_emerging_mini_review_article(
             if state_or_mod_studies:
                 candidate_paragraphs.append(
                     _build_section_paragraph(
-                        "**Nuanced State-Dependent, Isoform-Specific, and Polygenic Contexts**: "
-                        "Several investigations further show that the direction and magnitude of CaV1.2 involvement depend critically "
-                        "on abstinence duration, brain region, developmental stage, or genetic background.",
+                        state_lead,
                         state_or_mod_studies,
                         det_try,
                         use_short,
@@ -1171,9 +1196,7 @@ def _synthesize_emerging_mini_review_article(
             if null_or_dissoc_studies:
                 candidate_paragraphs.append(
                     _build_section_paragraph(
-                        "**Functional Dissociations and Negative Controls**: "
-                        "Finally, explicit dissociation experiments define the boundary conditions where CaV1.2 is dispensable or "
-                        "diverges from parallel pathways.",
+                        null_lead,
                         null_or_dissoc_studies,
                         det_try,
                         use_short,
@@ -1383,13 +1406,19 @@ def _rank_arm_assessments(
         if prev is None or len(f_txt) > len(_clean_finding_text(prev.get("finding") or "", cid)):
             by_pmid[p] = a
 
-    def _score(item: dict[str, Any]) -> tuple[int, int, int]:
+    def _score(item: dict[str, Any]) -> tuple[int, int, int, int]:
         d = str(item.get("direction") or "").lower()
         has_dir = 1 if d in ("increase", "decrease", "no_effect", "mixed") else 0
         sd = str(item.get("study_design") or "").lower()
         not_rev = 0 if "review" in sd else 1
-        fl = len(_clean_finding_text(item.get("finding") or "", cid))
-        return (not_rev, has_dir, min(fl, 260))
+        f_clean = _clean_finding_text(item.get("finding") or "", cid)
+        is_objective_or_truncated = bool(
+            re.match(r"^(?:to\s+(?:determine|examine|investigate|evaluate|assess|characterize|test|identify|explore)\b|whether\s+)", f_clean, re.I)
+            or re.search(r"(?:[=<>]\s*\d+|\(\d+)$", f_clean.rstrip("."))
+        )
+        complete_result = 0 if is_objective_or_truncated else 1
+        fl = len(f_clean)
+        return (complete_result, not_rev, has_dir, min(fl, 260))
 
     return sorted(by_pmid.values(), key=_score, reverse=True)
 
@@ -1599,19 +1628,18 @@ def _synthesize_concept_mini_review_prose(
 
     paragraphs: list[str] = []
 
-    if is_emerging and not overview["overlap_md_block"]:
+    if is_emerging:
         article_prose = _synthesize_emerging_mini_review_article(
             concept_title=concept_title,
             dedup_assessments=dedup_assessments,
             articles_by_pmid=articles_by_pmid,
             custom_narrative=custom_narrative,
             rel_prefix_to_pmid=rel_prefix_to_pmid,
+            primary_gene=primary_gene,
         )
         paragraphs.append(article_prose)
     else:
         paragraphs.append(overview["lead_md"])
-        if overview["overlap_md_block"]:
-            paragraphs.append(overview["overlap_md_block"])
 
         rel_groups: dict[str, dict[str, Any]] = {}
         for a in dedup_assessments:
@@ -2303,34 +2331,6 @@ The following findings and supporting evidence were confirmed during systematic 
         "verified": True,
     }
 
-    overlap_mrs = [
-        mr for mr in all_mini_reviews.values()
-        if mr["evidence_role"] == "overlap" and mr["gene_pmid_count"] > 0 and mr["phenotype_pmid_count"] > 0
-    ]
-    overlap_mrs.sort(key=lambda x: (-(x["gene_pmid_count"] + x["phenotype_pmid_count"]), -x["gene_pmid_count"], x["title"]))
-
-    overlap_section_lines: list[str] = []
-    if overlap_mrs:
-        overlap_section_lines.extend([
-            "## Gene-Phenotype Mechanistic Overlap (Candidate Points of Interaction)",
-            "",
-            f"The following **{len(overlap_mrs)} ontology concepts** contain confirmed evidence from both the "
-            f"**{primary_gene} Gene Arm** and the **{phenotype_title} Mechanism Arm**, representing the primary "
-            "biological sites of convergence in the Dual-Hub Knowledge Graph:",
-            "",
-            "| Overlap Concept | Category | Gene Arm Papers | Phenotype Arm Papers | Candidate Point of Interaction |",
-            "| --- | --- | --- | --- | --- |",
-        ])
-        for mr in overlap_mrs:
-            overlap_section_lines.append(
-                f"| [{_clean_text_for_cell(mr['title'])}](./concepts/{mr['slug']}.md) "
-                f"| `{mr['category']}` "
-                f"| {mr['gene_pmid_count']} "
-                f"| {mr['phenotype_pmid_count']} "
-                f"| {_clean_text_for_cell(mr['interaction_summary'] or mr['summary_plain'])} |"
-            )
-        overlap_section_lines.append("")
-
     category_sections: list[str] = []
     for cat in CATEGORY_ORDER:
         cat_mrs = [mr for mr in all_mini_reviews.values() if mr["category"] == cat]
@@ -2348,12 +2348,12 @@ The following findings and supporting evidence were confirmed during systematic 
                 "",
             ])
         cat_lines.extend([
-            "| Review Topic | Evidence Role | Supporting Papers | Species | Directions of Effect | Linked References |",
+            "| Review Topic | Evidence Role | Supporting Papers | Species | Mechanistic Overlap / Synthesis Summary | Linked References |",
             "| --- | --- | --- | --- | --- | --- |",
         ])
         for mr in sorted(cat_mrs, key=lambda x: (-len(x["pmids"]), x["title"])):
             sp_formatted = format_species_counts(mr["assessments"])
-            dir_set = sorted({str(a.get("direction") or "unspecified").lower() for a in mr["assessments"] if a.get("direction")})
+            summary_cell = _clean_text_for_cell(mr["interaction_summary"] or mr["summary_plain"])
             ref_links = ", ".join(f"[PMID {p}](./{p}.md)" for p in mr["pmids"][:8])
             if len(mr["pmids"]) > 8:
                 ref_links += f" (+{len(mr['pmids']) - 8} more)"
@@ -2368,7 +2368,7 @@ The following findings and supporting evidence were confirmed during systematic 
                 f"| {role_cell} "
                 f"| {len(mr['pmids'])} "
                 f"| {_clean_text_for_cell(sp_formatted)} "
-                f"| {_clean_text_for_cell(', '.join(dir_set) or 'unspecified')} "
+                f"| {summary_cell} "
                 f"| {ref_links} |"
             )
         cat_lines.append("")
@@ -2397,8 +2397,6 @@ The following findings and supporting evidence were confirmed during systematic 
     em_mr_count = sum(1 for mr in all_mini_reviews.values() if mr["is_emerging"])
     overlap_total_count = sum(1 for mr in all_mini_reviews.values() if mr["evidence_role"] == "overlap")
 
-    overlap_section_str = ("\n".join(overlap_section_lines) + "\n") if overlap_section_lines else ""
-
     index_md = f"""{to_yaml_frontmatter(index_frontmatter)}# Open Knowledge Format (OKF): {genes_label} in {phenotype_label}
 
 - **Review Workspace**: `{store.root.name}`
@@ -2413,7 +2411,9 @@ This knowledge base organizes confirmed included literature from both the **Targ
 1. **Focused Concept and Emerging Topic Reviews**: Synthesized before graph construction to capture gene-arm relationships, phenotype-mechanism relationships, and candidate points of interaction where gene and phenotype pathways intersect.
 2. **Atomic Reference Notes**: Record per-study bibliographic metadata, screening assessments, verbatim quotes, and cross-links.
 
-{overlap_section_str}## Ontology and Emerging Topic Reviews
+## Ontology and Emerging Topic Reviews
+
+Across the **{ont_mr_count} ontology concepts** and **{em_mr_count} emerging topic reviews** below, **{overlap_total_count} concepts** contain confirmed evidence from both the **{primary_gene} Gene Arm** and the **{phenotype_title} Mechanism Arm** (marked as `Overlap (G / P)`). Expand any category below to inspect each concept's candidate point of interaction, species breakdown, and linked reference notes.
 
 {chr(10).join(category_sections)}
 

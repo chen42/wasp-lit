@@ -577,31 +577,32 @@ def _discover_emerging_topics(
         ),
     ]
 
-    for pat_cid, pat_title, pat_regex, pat_narrative in off_ontology_patterns:
-        if pat_cid in topics_by_id:
-            continue
-        matched_pmids: set[str] = set()
-        for pmid, assessments in included_by_pmid.items():
-            for a in assessments:
-                blob = " ".join(
-                    str(a.get(k) or "")
-                    for k in ("finding", "quotation", "direction_target", "model", "tissue_or_cell")
-                )
-                if pat_regex.search(blob):
-                    matched_pmids.add(pmid)
-                    break
-        if len(matched_pmids) >= 2:
-            topics_by_id[pat_cid] = {
-                "concept_id": pat_cid,
-                "slug": concept_id_to_slug(pat_cid),
-                "category": "emerging",
-                "name": pat_cid.split("/", 1)[-1],
-                "title": pat_title,
-                "pmids": sorted(matched_pmids, key=lambda x: int(x) if x.isdigit() else x),
-                "narrative": pat_narrative,
-                "is_emerging": True,
-                "source": "auto-discovered",
-            }
+    if not topics_by_id:
+        for pat_cid, pat_title, pat_regex, pat_narrative in off_ontology_patterns:
+            if pat_cid in topics_by_id:
+                continue
+            matched_pmids: set[str] = set()
+            for pmid, assessments in included_by_pmid.items():
+                for a in assessments:
+                    blob = " ".join(
+                        str(a.get(k) or "")
+                        for k in ("finding", "quotation", "direction_target", "model", "tissue_or_cell")
+                    )
+                    if pat_regex.search(blob):
+                        matched_pmids.add(pmid)
+                        break
+            if len(matched_pmids) >= 2:
+                topics_by_id[pat_cid] = {
+                    "concept_id": pat_cid,
+                    "slug": concept_id_to_slug(pat_cid),
+                    "category": "emerging",
+                    "name": pat_cid.split("/", 1)[-1],
+                    "title": pat_title,
+                    "pmids": sorted(matched_pmids, key=lambda x: int(x) if x.isdigit() else x),
+                    "narrative": pat_narrative,
+                    "is_emerging": True,
+                    "source": "auto-discovered",
+                }
 
     # 4. Fallback for small workspaces/tests: if fewer than 2 emerging topics exist, check shared specific direction_targets
     if len(topics_by_id) < 2:
@@ -2455,6 +2456,12 @@ This knowledge base organizes confirmed included literature from both the **Targ
                 existing_cfile.unlink()
             except OSError:
                 pass
+            html_sibling = existing_cfile.with_suffix(".html")
+            if html_sibling.exists():
+                try:
+                    html_sibling.unlink()
+                except OSError:
+                    pass
 
     return {
         "workspace": str(store.root),

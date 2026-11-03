@@ -149,6 +149,9 @@ def parser():
         if name in ("okf", "export-okf"):
             command.add_argument("--confirm", action="store_true",
                                  help="Record user confirmation for OKF export in user-decisions.md")
+        if name == "render-html":
+            command.add_argument("--zip", action="store_true",
+                                 help="Package HTML portal and corpus into <workspace>-shareable.zip")
         if name == "okf-topic":
             command.add_argument("--id", required=True, help="Emerging topic slug or ID (e.g., calcium-plasticity)")
             command.add_argument("--title", required=True, help="Display title for the emerging topic mini-review")
@@ -454,7 +457,7 @@ def main(argv=None):
                     "candidate_pool_exhausted", "blocked", "selection_mode")} | {
                     "run_path": str(store.base / "runs" / (args.run_id + ".json"))}
         if args.command == "render-html":
-            return store.render_html()
+            return store.render_html(create_zip=getattr(args, "zip", False))
         if args.command in ("okf", "export-okf"):
             return store.render_okf(confirm=args.confirm)
         if args.command == "okf-topic":

@@ -29,6 +29,12 @@ Workspace/run: [workspace and run ID]<br>
 
 [State plausible molecular and circuit mechanisms, including both well-supported chains and looser, exploratory connections grounded in the literature. Highlight knowledge gaps and experimental uncertainties.]
 
+## Limitations and Future Experimental Tests
+
+[Summarize key corpus limitations and structure future experimental proposals into two tiers:
+- Core Mechanistic and Circuit Validation Experiments: Direct tests of the primary Gene x Phenotype convergence nodes.
+- Exploratory Bipartite Hypotheses (High-Impact Mechanistic Bridges): Swanson A-B-C hypotheses mined from asymmetric overlap nodes and one-sided (`gene_only` or `phenotype_only`) concept bridges in the bipartite knowledge graph. Do not use numerical points for these hypotheses; format each hypothesis with an unnumbered `####` subheading followed by a cohesive paragraph covering the bipartite premise citing specific Gene Arm and Phenotype Arm PMIDs, the mechanistic rationale, and the experimental design and falsifiable readouts.]
+
 ## Scoped conclusion
 
 [At the end, give a balanced assessment of candidate-gene plausibility, the strongest intermediate evidence chain, unsupported or weak links, and the next uncertainty. Do not infer causality from co-occurrence, pathway membership, or association alone.]

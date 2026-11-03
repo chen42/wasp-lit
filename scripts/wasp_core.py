@@ -445,16 +445,45 @@ class Store:
                                       "abstract_status": "available" if abstract and abstract.strip() else "missing"}
         self.save_table("articles", sorted(articles.values(), key=lambda a: int(a["pmid"])))
 
+    def _verified_file_hash(self, path):
+        cache = getattr(self, "_file_hash_cache", None)
+        if cache is None:
+            cache = {}
+            self._file_hash_cache = cache
+        key = str(path)
+        try:
+            st = path.stat()
+            stamp = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            stamp = None
+        cached = cache.get(key)
+        if cached and cached[0] == stamp:
+            return cached[1]
+        h = file_hash(path)
+        if stamp is not None:
+            cache[key] = (stamp, h)
+        return h
+
     def article(self, pmid, version):
         metadata = {"source_version", "source_snapshot", "source_retrieved_at", "version_path", "abstract_status"}
-        indexed = next((row for row in self.table("articles")
-                        if row.get("pmid") == pmid and row.get("source_version") == version), None)
+        articles_path = self.base / "articles.jsonl"
+        try:
+            st = articles_path.stat()
+            stamp = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            stamp = None
+        idx_cache = getattr(self, "_articles_index_cache", None)
+        if idx_cache is None or idx_cache[0] != stamp:
+            by_key = {(row.get("pmid"), row.get("source_version")): row for row in self.table("articles")}
+            idx_cache = (stamp, by_key)
+            self._articles_index_cache = idx_cache
+        indexed = idx_cache[1].get((pmid, version))
         if indexed is not None:
             record = {key: value for key, value in indexed.items() if key not in metadata}
             if digest(record) != version:
                 raise WaspError("Canonical article record checksum mismatch")
             ref = indexed.get("source_snapshot")
-            if ref is not None and file_hash(self.path(ref["path"])) != ref["sha256"]:
+            if ref is not None and self._verified_file_hash(self.path(ref["path"])) != ref["sha256"]:
                 raise WaspError("Original source snapshot checksum mismatch")
             if ref is None:
                 legacy = self.base / "versions" / pmid / (version + ".json")
@@ -462,7 +491,7 @@ class Store:
                     raise WaspError("Article provenance snapshot is unavailable")
                 value = load(legacy)
                 ref = value["source_snapshot"]
-                if file_hash(self.path(ref["path"])) != ref["sha256"]:
+                if self._verified_file_hash(self.path(ref["path"])) != ref["sha256"]:
                     raise WaspError("Original source snapshot checksum mismatch")
             return record
         # Historical records remain recoverable from the original batched fetch
@@ -1836,15 +1865,17 @@ class Store:
         rel_overview = self.rel(self.base / "overview.json")
         rel_queries = self.rel(self.base / "queries.json")
         top_docs = [
-            "- [Evidence synthesis](./synthesis.md): Narrative synthesis integrating baseline gene biology, GWAS associations, and screened PubMed evidence.",
+            "- [Evidence synthesis](./synthesis.md): Post-Knowledge-Graph narrative synthesis integrating baseline gene biology, human GWAS associations, phenotype mechanisms, gene-by-ontology evidence, and Knowledge Graph overlap loci.",
+        ]
+        if (self.root / "okf" / "index.md").exists():
+            top_docs.append("- [Open Knowledge Format (OKF) reference index](./okf/index.md): Self-describing Google Open Knowledge Format concept reviews and atomic reference notes.")
+        top_docs.extend([
             "- [Literature search ontology](./ontology.md): Hierarchical search ontology, priority focus status, abstract caps, and full-text corpus mapping.",
             "- [User decision log](./user-decisions.md): User-approved scope parameters, concept-cap approvals, and manual overrides.",
             "- [AI decision and screening log](./ai-decisions.md): AI concept-prioritization rationale, Jev triage summary, and per-PMID subagent screening tables.",
             "- [Baseline gene function summary](./gene-function.md): Baseline molecular, expression, and structural context.",
             "- [GWAS association summary](./gwas-associations.md): Human GWAS Catalog variant and trait summary (when GWAS enrichment is run).",
-        ]
-        if (self.root / "okf" / "index.md").exists():
-            top_docs.append("- [Open Knowledge Format reference index](./okf/index.md): Google Open Knowledge Format concept bundle of references passing screening.")
+        ])
 
         content = "\n".join([
             f"# wasp-lit Workspace: {genes_label} and {context.get('phenotype')}",
@@ -1852,6 +1883,18 @@ class Store:
             "## Top-Level Human-Readable Documents",
             "",
             *top_docs,
+            "",
+            "## Workflow Pipeline Steps",
+            "",
+            "1. **Stage 0: Baseline Gene Function and Scope Initialization**: Gather baseline molecular, structural, and anatomical expression profiles for the candidate gene(s) ([Baseline gene function summary](./gene-function.md)), select priority ontology concepts, and freeze workspace scope ([User decision log](./user-decisions.md)).",
+            "2. **Stage 1: Two-Arm Query Planning (Preferential Ontology Caps)**: Plan PubMed queries for both the **Candidate Gene Arm** (Gene x Ontology + Direct Gene x Phenotype) and the **Phenotype Mechanism Arm** (Phenotype x Ontology) in the same workspace (`plan-phenotype-search`), applying preferential abstract caps (`abstract_cap` = 200 for priority ontology concepts; `other_abstract_cap` = 30 for remaining ontology concepts) ([Literature search ontology](./ontology.md)).",
+            "3. **Stage 2: PubMed Retrieval (`collect`)**: Enumerate all matching PMIDs and fetch capped newest records for both the Gene Arm (`--arm gene`) and the Phenotype Mechanism Arm (`--arm phenotype`) into the shared canonical article store.",
+            "4. **Stage 3: Abstract Triage and Structured Evidence Extraction (`triage`, `jobs`, `evidence-record`)**: Screen Gene x Concept and Phenotype x Concept abstract pairs with Jev classification (`wasp.py triage`), then extract validated structured evidence records (experimental model, species, study design, tissue/cell site, direction, target readout, and verbatim abstract quotation) into `corpus/evidence.jsonl` ([AI decision and screening log](./ai-decisions.md)).",
+            "5. **Stage 4: Human GWAS Catalog Associations and Full-Text Retrieval (`associations`, `fulltext`)**: Capture and validate NHGRI-EBI GWAS Catalog variant-trait associations ([GWAS association summary](./gwas-associations.md)) and retrieve open-access PMC full texts within the run quota.",
+            "6. **Stage 5: Concept Reviews First (Stage 5a), Then Dual-Hub Knowledge Graph Construction (Stage 5b) (`okf --confirm`)**:",
+            "   - **Stage 5a (Concept Reviews and Atomic Reference Notes First)**: Synthesize per-study Atomic Reference Notes (`okf/<PMID>.md`) and per-concept reviews (`okf/concepts/<slug>.md`) integrating Gene Arm relationships, Phenotype Arm mechanisms, and `Gene-Phenotype Mechanistic Overlap and Candidate Points of Interaction`.",
+            "   - **Stage 5b (Dual-Hub Knowledge Graph Construction)**: Build the Dual-Hub Bipartite/Radial Knowledge Graph (`corpus/okf_graph.json`, [Open Knowledge Format (OKF) reference index](./okf/index.md), and `okf.html`) connecting the Candidate Gene Hub, Phenotype Hub, Human GWAS Node, and Central Overlap Concept Nodes.",
+            "7. **Stage 6: Post-Knowledge-Graph Final Synthesis, HTML Portal, and Audit (`synthesis.md`, `render-html --zip`, `audit`)**: Write the final [Evidence synthesis](./synthesis.md) **after** the Knowledge Graph is constructed, evaluating baseline gene biology, human GWAS, mechanism of the phenotype, candidate gene evidence, and the specific Gene x Phenotype interaction loci revealed by the Knowledge Graph, followed by full-width HTML/ZIP rendering and cryptographic provenance audit.",
             "",
             "## Corpus Summary",
             "",
@@ -1879,10 +1922,10 @@ class Store:
         from render_html import generate_ontology_markdown
         return generate_ontology_markdown(self.root)
 
-    def render_html(self):
+    def render_html(self, create_zip=False):
         """Render workspace Markdown documents (synthesis, gene-function, decisions, etc.) to interactive HTML."""
         from render_html import render_workspace_html
-        return render_workspace_html(self.root)
+        return render_workspace_html(self.root, create_zip=create_zip)
 
     def render_okf(self, confirm=False):
         """Export confirmed references and mini-reviews to Google Open Knowledge Format files under okf/."""

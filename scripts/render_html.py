@@ -2,8 +2,10 @@
 """Render wasp-lit workspace Markdown files as interactive HTML documents with dark theme and PubMed tooltips."""
 
 import argparse
+import base64
 from collections import defaultdict
 import html
+import io
 import json
 import os
 import re
@@ -13,6 +15,35 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from bs4 import BeautifulSoup
 import markdown
+
+
+_WASP_ICON_DATA_URI_CACHE = None
+
+
+def _get_wasp_icon_data_uri() -> str:
+    """Return a compact 64x64 JPEG base64 data URI for the wasp-lit navbar icon."""
+    global _WASP_ICON_DATA_URI_CACHE
+    if _WASP_ICON_DATA_URI_CACHE:
+        return _WASP_ICON_DATA_URI_CACHE
+    icon_path = Path(__file__).resolve().parent.parent / "assets" / "wasp-lib.jpg"
+    if icon_path.exists():
+        try:
+            from PIL import Image
+            img = Image.open(icon_path).convert("RGB")
+            img_small = img.resize((64, 64), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img_small.save(buf, format="JPEG", quality=85, optimize=True)
+            b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+            _WASP_ICON_DATA_URI_CACHE = f"data:image/jpeg;base64,{b64}"
+            return _WASP_ICON_DATA_URI_CACHE
+        except Exception:
+            try:
+                b64 = base64.b64encode(icon_path.read_bytes()).decode("ascii")
+                _WASP_ICON_DATA_URI_CACHE = f"data:image/jpeg;base64,{b64}"
+                return _WASP_ICON_DATA_URI_CACHE
+            except Exception:
+                pass
+    return ""
 
 SOURCECERY_NORD_CSS = """
 :root {
@@ -53,7 +84,7 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   line-height: 1.65;
-  font-size: 15px;
+  font-size: 18px;
 }
 
 /* Header & Top Navigation Bar */
@@ -79,6 +110,27 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.nav-brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--header-color);
+  text-decoration: none;
+}
+
+.nav-brand-link:hover {
+  color: var(--accent-hover-color);
+  text-decoration: none;
+}
+
+.nav-brand-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border-color);
 }
 
 .nav-brand .tag {
@@ -122,19 +174,102 @@ body {
   font-weight: 600;
 }
 
-/* Main Layout Container */
+/* Navigation Dropdown (Search Parameters) */
+.nav-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.nav-dropdown-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+
+.nav-dropdown-caret {
+  font-size: 0.75em;
+  opacity: 0.8;
+  transition: transform 0.15s ease;
+}
+
+.nav-dropdown:hover .nav-dropdown-caret,
+.nav-dropdown:focus-within .nav-dropdown-caret,
+.nav-dropdown.open .nav-dropdown-caret {
+  transform: rotate(180deg);
+}
+
+.nav-dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: 100%;
+  min-width: 185px;
+  background-color: #191d26;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  padding: 6px;
+  z-index: 1200;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-dropdown:hover .nav-dropdown-menu,
+.nav-dropdown:focus-within .nav-dropdown-menu,
+.nav-dropdown.open .nav-dropdown-menu {
+  display: flex;
+}
+
+.nav-dropdown-item {
+  color: var(--text-color);
+  text-decoration: none;
+  padding: 7px 12px;
+  border-radius: 4px;
+  font-size: 0.86em;
+  font-weight: 500;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.nav-dropdown-item:hover {
+  background-color: var(--control-bg-color);
+  color: var(--header-color);
+}
+
+.nav-dropdown-item.active {
+  background-color: var(--accent-bg-color);
+  color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* Main Layout Container: Full-Page Width Background, Centered Main Text, Full-Width Knowledge Graph */
 .container {
-  max-width: 1060px;
-  margin: 32px auto;
-  padding: 0 24px 64px 24px;
+  max-width: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 .content-card {
+  width: 100%;
+  max-width: 100%;
+  min-height: calc(100vh - 60px);
   background-color: var(--card-bg-color);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 40px 48px;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  padding: 36px 28px 64px 28px;
   box-shadow: var(--shadow);
+}
+
+.content-card > *:not(.okf-visualizer-card) {
+  max-width: 1180px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* Typography */
@@ -193,6 +328,12 @@ p, ul, ol {
 
 ul, ol {
   padding-left: 26px;
+}
+
+ul ul, ol ul, ul ol, ol ol {
+  margin-top: 6px;
+  margin-bottom: 10px;
+  padding-left: 32px;
 }
 
 li {
@@ -663,7 +804,9 @@ details.tree-branch[open] > summary.tree-summary .tree-arrow {
 
 /* Open Knowledge Format (OKF) Cytoscape Visualizer & Side-Panel Inspector */
 .okf-visualizer-card {
-  margin: 22px 0 30px 0;
+  width: 100%;
+  max-width: 100%;
+  margin: 28px 0 36px 0;
   border: 1px solid var(--border-color);
   border-radius: 10px;
   background-color: #151921;
@@ -752,11 +895,17 @@ details.tree-branch[open] > summary.tree-summary .tree-arrow {
 
 .okf-visualizer-layout {
   display: grid;
-  grid-template-columns: 1fr 410px;
-  min-height: 580px;
+  grid-template-columns: 1fr 480px;
+  min-height: 920px;
+  width: 100%;
 }
 
 @media (max-width: 1024px) {
+  .okf-visualizer-card {
+    width: 100%;
+    margin: 22px 0 30px 0;
+    transform: none;
+  }
   .okf-visualizer-layout {
     grid-template-columns: 1fr;
   }
@@ -764,15 +913,15 @@ details.tree-branch[open] > summary.tree-summary .tree-arrow {
 
 #cy-graph {
   width: 100%;
-  height: 580px;
+  height: 920px;
   background: radial-gradient(circle at center, #1b202b 0%, #12151c 100%);
   position: relative;
 }
 
 #okf-side-panel {
-  height: 580px;
+  height: 920px;
   overflow-y: auto;
-  padding: 18px 20px;
+  padding: 20px 24px;
   background-color: #191d26;
   border-left: 1px solid var(--border-color);
   font-size: 0.9em;
@@ -874,9 +1023,30 @@ details.tree-branch[open] > summary.tree-summary .tree-arrow {
 SOURCECERY_JS = """
 // SourceCery Tooltip and Dynamic Retrieval Logic
 (function() {
+  window.pmidCache = window.pmidCache || {};
   const tooltip = document.getElementById("tooltip");
   let currentHoverPmid = null;
   const fetchingPmids = new Set();
+
+  function getCachedPmid(pmid) {
+    if (window.pmidCache[pmid]) return window.pmidCache[pmid];
+    try {
+      const raw = sessionStorage.getItem("sc_pmid_" + pmid);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        window.pmidCache[pmid] = parsed;
+        return parsed;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function setCachedPmid(pmid, entry) {
+    window.pmidCache[pmid] = entry;
+    try {
+      sessionStorage.setItem("sc_pmid_" + pmid, JSON.stringify(entry));
+    } catch (e) {}
+  }
 
   function formatAuthors(authorsArr) {
     if (!authorsArr || authorsArr.length === 0) return "Unknown authors";
@@ -906,7 +1076,7 @@ SOURCECERY_JS = """
   }
 
   async function fetchBatchPmidData(pmids) {
-    const toFetch = pmids.filter(p => !window.pmidCache[p]);
+    const toFetch = pmids.filter(p => !getCachedPmid(p));
     if (toFetch.length === 0) return;
     try {
       const response = await fetch(
@@ -943,7 +1113,7 @@ SOURCECERY_JS = """
           article.querySelector("Journal Title")?.textContent ||
           article.querySelector("Journal ISOAbbreviation")?.textContent || "";
 
-        window.pmidCache[pmid] = {
+        setCachedPmid(pmid, {
           authorYear: `${firstAuthorLastName} ${year}`,
           tooltipData: {
             title,
@@ -951,7 +1121,7 @@ SOURCECERY_JS = """
             journal: year !== "N/A" ? `${journal} (${year})` : journal,
             abstract: abstractText,
           },
-        };
+        });
       });
     } catch (error) {
       console.error("Failed to fetch batch PMID data:", error);
@@ -959,7 +1129,7 @@ SOURCECERY_JS = """
   }
 
   function showTooltip(pmid, e) {
-    const entry = window.pmidCache ? window.pmidCache[pmid] : null;
+    const entry = getCachedPmid(pmid);
     if (entry && entry.tooltipData) {
       const d = entry.tooltipData;
       tooltip.innerHTML = `
@@ -1010,6 +1180,31 @@ SOURCECERY_JS = """
     if (currentHoverPmid) {
       positionTooltip(e);
     }
+  });
+
+  window.showPmidTooltip = function(pmid, e) {
+    if (!pmid) return;
+    currentHoverPmid = String(pmid);
+    showTooltip(String(pmid), e || { pageX: 200, pageY: 200, clientX: 200, clientY: 200 });
+  };
+
+  window.hidePmidTooltip = function() {
+    currentHoverPmid = null;
+    if (tooltip) tooltip.style.display = "none";
+  };
+
+  // Search Parameters dropdown click toggle for touch/keyboard accessibility
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".nav-dropdown-btn");
+    if (btn) {
+      const dd = btn.closest(".nav-dropdown");
+      if (dd) {
+        e.stopPropagation();
+        dd.classList.toggle("open");
+      }
+      return;
+    }
+    document.querySelectorAll(".nav-dropdown.open").forEach(dd => dd.classList.remove("open"));
   });
 })();
 """
@@ -1109,20 +1304,22 @@ def extract_pubmed_cache_from_corpus(corpus_dir, extra_pmids=None):
 
 NAV_PAGES = [
     ("synthesis", "synthesis.html", "Synthesis"),
-    ("ontology", "ontology.html", "Ontology"),
     ("gene-function", "gene-function.html", "Gene Function"),
-    ("user-decisions", "user-decisions.html", "User Decisions"),
-    ("ai-decisions", "ai-decisions.html", "AI Decisions"),
     ("gwas-associations", "gwas-associations.html", "GWAS Associations"),
     ("README", "README.html", "Overview"),
+    ("ontology", "ontology.html", "Ontology"),
+    ("user-decisions", "user-decisions.html", "User Decisions"),
+    ("ai-decisions", "ai-decisions.html", "AI Decisions"),
 ]
+
+DROPDOWN_NAV_KEYS = {"README", "ontology", "user-decisions", "ai-decisions"}
 
 
 def get_nav_pages(workspace_dir=None):
-    """Return navigation pages list, adding Open Knowledge (OKF) tab when okf/index.md exists."""
+    """Return navigation pages list, adding Knowledge Graph (OKF) tab when okf/index.md exists."""
     pages = list(NAV_PAGES)
     if workspace_dir and (Path(workspace_dir) / "okf" / "index.md").exists():
-        pages.insert(2, ("okf", "okf.html", "Open Knowledge (OKF)"))
+        pages.insert(1, ("okf", "okf.html", "Knowledge Graph"))
     return pages
 
 
@@ -1249,16 +1446,42 @@ def detect_runtime_model(workspace_path=None):
     return detect_accurate_provenance(workspace_path).get("model")
 
 
-def render_html_page(title, body_html, active_key, gene_symbol, cache_dict, nav_pages=None, nav_prefix="./", extra_scripts=""):
+def render_html_page(title, body_html, active_key, gene_symbol, cache_dict=None, nav_pages=None, nav_prefix="./", extra_scripts=""):
     """Wrap body HTML in the complete dark theme layout with nav and SourceCery script."""
     pages = nav_pages if nav_pages is not None else NAV_PAGES
     nav_links = []
-    for key, filename, label in pages:
-        active_cls = " active" if key == active_key else ""
-        nav_links.append(f'<a href="{nav_prefix}{filename}" class="nav-link{active_cls}">{label}</a>')
-    nav_html = "\n        ".join(nav_links)
+    dropdown_items = []
+    dropdown_active = False
 
-    cache_json = json.dumps(cache_dict, ensure_ascii=False)
+    for key, filename, label in pages:
+        if key in DROPDOWN_NAV_KEYS:
+            is_act = (key == active_key)
+            if is_act:
+                dropdown_active = True
+            act_cls = " active" if is_act else ""
+            dropdown_items.append(f'<a href="{nav_prefix}{filename}" class="nav-dropdown-item{act_cls}">{label}</a>')
+        else:
+            active_cls = " active" if key == active_key else ""
+            nav_links.append(f'<a href="{nav_prefix}{filename}" class="nav-link{active_cls}">{label}</a>')
+
+    if dropdown_items:
+        dd_btn_cls = " active" if dropdown_active else ""
+        dropdown_html = (
+            f'<div class="nav-dropdown">'
+            f'<button type="button" class="nav-link nav-dropdown-btn{dd_btn_cls}">'
+            f'Search Parameters <span class="nav-dropdown-caret">&#9662;</span></button>'
+            f'<div class="nav-dropdown-menu">{"".join(dropdown_items)}</div>'
+            f'</div>'
+        )
+        nav_links.append(dropdown_html)
+
+    nav_html = "\n        ".join(nav_links)
+    icon_uri = _get_wasp_icon_data_uri()
+    icon_img_html = (
+        f'<img src="{icon_uri}" alt="wasp-lit" class="nav-brand-icon" />\n        '
+        if icon_uri
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1273,7 +1496,9 @@ def render_html_page(title, body_html, active_key, gene_symbol, cache_dict, nav_
 <body>
   <header class="top-nav">
     <div class="nav-brand">
-      <span>wasp-lit</span>
+      <a href="https://github.com/chen42/wasp-lit" target="_blank" rel="noopener noreferrer" class="nav-brand-link" title="wasp-lit on GitHub">
+        {icon_img_html}<span>wasp-lit</span>
+      </a>
       <span class="tag">{html.escape(gene_symbol)}</span>
     </div>
     <nav class="nav-links">
@@ -1289,9 +1514,6 @@ def render_html_page(title, body_html, active_key, gene_symbol, cache_dict, nav_
 
   <div id="tooltip"></div>
 
-  <script>
-    window.pmidCache = {cache_json};
-  </script>
   <script>
 {SOURCECERY_JS}
   </script>
@@ -1334,7 +1556,7 @@ def process_markdown_file(
             href = re.sub(r"\.md(\b|#)", r".html\1", href)
         a["href"] = href
 
-    # 2. Tag existing PubMed links with class="pmid-link" and data-pmid
+    # 2. Tag existing PubMed links and internal <pmid>.html links with class="pmid-link" and data-pmid
     for a in soup.find_all("a", href=True):
         m = re.search(r"pubmed\.ncbi\.nlm\.nih\.gov/(\d+)", a["href"])
         if m:
@@ -1345,6 +1567,15 @@ def process_markdown_file(
                 classes.append("pmid-link")
             a["class"] = classes
             a["target"] = "_blank"
+        else:
+            m_local = re.search(r"(?:^|/)(\d{7,8})\.html(?:#.*)?$", a["href"])
+            if m_local:
+                pmid = m_local.group(1)
+                a["data-pmid"] = pmid
+                classes = a.get("class", [])
+                if "pmid-link" not in classes:
+                    classes.append("pmid-link")
+                a["class"] = classes
 
     # 3. Detect and tag PMIDs in text nodes (e.g. table cells, lists)
     # Check if number is in pmid_cache or in a PMID table column
@@ -1797,7 +2028,7 @@ Scope: {species}
 
 This document describes the structured search ontology, priority focus status, and literature corpus partitioning used to evaluate {gene} evidence in {phenotype}. PubMed queries were stratified into {total_strata} conceptual search strata across 8 biological categories.
 
-To prioritize pathways directly mediating nicotine reinforcement, mesolimbic circuit signaling, and calcium channel neuroplasticity, {len(focused_concepts)} priority concepts were focused with an elevated abstract cap of 200 abstracts per concept. Secondary, contextual, and comorbidity concepts operated under a standard cap of 30 abstracts per concept.
+To prioritize pathways directly mediating {phenotype} and {gene} molecular, cellular, and circuit mechanisms, {len(focused_concepts)} priority concepts were focused with an elevated abstract cap of 200 abstracts per concept. Secondary, contextual, and comorbidity concepts operated under a standard cap of 30 abstracts per concept.
 
 {kpi_html}
 
@@ -1837,11 +2068,13 @@ OKF_CYTOSCAPE_JS = """
   const sidePanel = document.getElementById("okf-side-panel");
   if (!graphData || !container || !sidePanel) return;
 
-  const activeCategories = new Set(graphData.active_categories || []);
+  const allCategoriesList = Array.from(graphData.active_categories || []);
+  const activeCategories = new Set(allCategoriesList);
   let currentSpecies = "all";
   let currentDirection = "all";
   let searchQuery = "";
-  let showPmidLeaves = true;
+  let showPmidLeaves = false;
+  let showGwasNode = true;
   let cy = null;
 
   const nodeMap = {};
@@ -1858,6 +2091,14 @@ OKF_CYTOSCAPE_JS = """
       .replace(/"/g, "&quot;");
   }
 
+  // Auto-link any plain-text "PMID 12345678" or "PMID: 12345678" into hoverable PubMed links
+  function linkifyPlainPmids(s) {
+    const escaped = escapeHtml(s);
+    return escaped.replace(/ PMID[:\\s]+(\\d{7,8}) /gi, (m, p) => {
+      return `<a class="pmid-link" data-pmid="${p}" href="https://pubmed.ncbi.nlm.nih.gov/${p}/" target="_blank">${m}</a>`;
+    });
+  }
+
   function adjustNoteUrl(url) {
     if (!url) return "#";
     const prefix = window.okfUrlPrefix || "./";
@@ -1872,16 +2113,35 @@ OKF_CYTOSCAPE_JS = """
     const badgeColor = d.color || "#88c0d0";
     let typeLabel = "Knowledge Node";
     if (d.node_type === "gene") typeLabel = "Target Gene Hub";
+    else if (d.node_type === "phenotype_hub") typeLabel = "Phenotype Mechanism Hub";
+    else if (d.node_type === "gwas_hub") typeLabel = "Human GWAS Catalog Hub";
     else if (d.node_type === "category") typeLabel = d.is_emerging ? "Emerging Topics Hub" : "Ontology Category Hub";
-    else if (d.node_type === "emerging_concept") typeLabel = "Emerging Topic Mini-Review";
-    else if (d.node_type === "concept") typeLabel = "Ontology Concept Mini-Review";
+    else if (d.node_type === "emerging_concept") typeLabel = "Emerging Topic Review";
+    else if (d.node_type === "concept") {
+      typeLabel = d.evidence_role === "overlap" ? "Gene x Phenotype Overlap Concept" : "Ontology Concept Review";
+    }
     else if (d.node_type === "pmid") typeLabel = "Atomic Reference (PMID)";
 
     const pills = [];
+    if (d.evidence_role) {
+      const roleLabels = {
+        "overlap": "Role: Gene x Phenotype Overlap",
+        "gene_only": "Role: Gene Arm",
+        "phenotype_only": "Role: Phenotype Arm",
+        "gene_hub": "Role: Gene Hub",
+        "phenotype_hub": "Role: Phenotype Hub",
+        "gwas_hub": "Role: Human GWAS Hub"
+      };
+      if (roleLabels[d.evidence_role]) {
+        pills.push(`<span class="okf-meta-pill">${escapeHtml(roleLabels[d.evidence_role])}</span>`);
+      }
+    }
     if (d.category && d.category !== "gene") {
       pills.push(`<span class="okf-meta-pill">Category: ${escapeHtml(d.category)}</span>`);
     }
-    if (Array.isArray(d.species) && d.species.length) {
+    if (d.species_summary) {
+      pills.push(`<span class="okf-meta-pill">Species: ${escapeHtml(d.species_summary)}</span>`);
+    } else if (Array.isArray(d.species) && d.species.length) {
       pills.push(`<span class="okf-meta-pill">Species: ${escapeHtml(d.species.join(", "))}</span>`);
     }
     if (Array.isArray(d.directions) && d.directions.length) {
@@ -1899,13 +2159,20 @@ OKF_CYTOSCAPE_JS = """
       actionsHtml += `<a class="okf-jump-chip pmid-link" data-pmid="${escapeHtml(d.pmid || '')}" href="${escapeHtml(d.pubmed_url)}" target="_blank">PubMed (${escapeHtml(d.pmid || '')})</a>`;
     }
 
+    let interactionHtml = "";
+    if (d.interaction_summary) {
+      interactionHtml = `<div class="okf-panel-section"><h4>Candidate Point of Interaction</h4><p style="margin:0;color:#ebcb8b;">${linkifyPlainPmids(d.interaction_summary)}</p></div>`;
+    }
+
     let assessmentsHtml = "";
     if (Array.isArray(d.assessments) && d.assessments.length > 0) {
       const cards = d.assessments.map(a => {
-        const pmidPart = a.pmid ? `<strong><a class="pmid-link" data-pmid="${escapeHtml(a.pmid)}" href="https://pubmed.ncbi.nlm.nih.gov/${escapeHtml(a.pmid)}/" target="_blank">${escapeHtml(a.author_year || ('PMID ' + a.pmid))}</a></strong>` : "";
+        const pmidPart = a.pmid ? `<strong><a class="pmid-link" data-pmid="${escapeHtml(a.pmid)}" href="https://pubmed.ncbi.nlm.nih.gov/${escapeHtml(a.pmid)}/" target="_blank">${escapeHtml(a.author_year || ('PMID ' + a.pmid))} (PMID ${escapeHtml(a.pmid)})</a></strong>` : "";
+        const armPart = a.arm ? `<span style="color:#88c0d0;">${escapeHtml(a.arm)}</span>` : "";
         const conceptPart = a.concept ? `<span>Concept: <code>${escapeHtml(a.concept)}</code></span>` : "";
         const metaLine = [
           pmidPart,
+          armPart,
           conceptPart,
           a.species ? `Species: ${escapeHtml(a.species)}` : "",
           a.study_design ? `Design: ${escapeHtml(a.study_design)}` : "",
@@ -1914,7 +2181,7 @@ OKF_CYTOSCAPE_JS = """
         const quoteBlock = a.quotation ? `<blockquote class="okf-quote">"${escapeHtml(a.quotation)}"</blockquote>` : "";
         return `<div class="okf-assessment-card">
           <div style="font-size:0.8em;color:#c8c0b0;margin-bottom:4px;">${metaLine}</div>
-          <div>${escapeHtml(a.finding || '')}</div>
+          <div>${linkifyPlainPmids(a.finding || '')}</div>
           ${quoteBlock}
         </div>`;
       }).join("");
@@ -1929,13 +2196,13 @@ OKF_CYTOSCAPE_JS = """
       const chips = d.concepts.map(c =>
         `<button type="button" class="okf-jump-chip" data-jump-id="${escapeHtml(c.id)}">${escapeHtml(c.title)}</button>`
       ).join("");
-      connectedHtml += `<div class="okf-panel-section"><h4>Linked Mini-Reviews</h4><div>${chips}</div></div>`;
+      connectedHtml += `<div class="okf-panel-section"><h4>Linked Concept Reviews</h4><div>${chips}</div></div>`;
     }
     if (Array.isArray(d.pmids) && d.pmids.length > 0) {
       const pChips = d.pmids.map(p => {
         const pNode = nodeMap["pmid:" + p];
         const lbl = pNode ? pNode.label : ("PMID " + p);
-        return `<button type="button" class="okf-jump-chip" data-jump-id="pmid:${escapeHtml(p)}">${escapeHtml(lbl)} (${escapeHtml(p)})</button>`;
+        return `<button type="button" class="okf-jump-chip pmid-link" data-pmid="${escapeHtml(p)}" data-jump-id="pmid:${escapeHtml(p)}">${escapeHtml(lbl)} (${escapeHtml(p)})</button>`;
       }).join("");
       connectedHtml += `<div class="okf-panel-section"><h4>Supporting Study Nodes (${d.pmids.length})</h4><div>${pChips}</div></div>`;
     }
@@ -1947,7 +2214,8 @@ OKF_CYTOSCAPE_JS = """
         <div class="okf-panel-subtitle">${escapeHtml(d.subtitle || '')}</div>
         <div class="okf-panel-pills">${pills.join("")}</div>
         ${actionsHtml ? `<div style="margin-bottom:12px;">${actionsHtml}</div>` : ""}
-        ${d.summary ? `<div class="okf-panel-section"><h4>Mini-Review Overview</h4><p style="margin:0;">${escapeHtml(d.summary)}</p></div>` : ""}
+        ${d.summary ? `<div class="okf-panel-section"><h4>Concept Synthesis</h4><p style="margin:0;">${linkifyPlainPmids(d.summary)}</p></div>` : ""}
+        ${interactionHtml}
         ${assessmentsHtml}
         ${connectedHtml}
       </div>
@@ -1965,9 +2233,10 @@ OKF_CYTOSCAPE_JS = """
 
   function nodeMatchesFilters(d) {
     if (!d) return false;
-    if (d.node_type === "gene") return true;
+    if (d.node_type === "gene" || d.node_type === "phenotype_hub") return true;
+    if (d.node_type === "gwas_hub") return showGwasNode;
     if (d.node_type === "pmid" && !showPmidLeaves) return false;
-    if (d.category && d.category !== "gene" && activeCategories.size > 0 && !activeCategories.has(d.category)) {
+    if (d.category && d.category !== "gene" && !activeCategories.has(d.category)) {
       return false;
     }
     if (currentSpecies !== "all") {
@@ -1984,6 +2253,7 @@ OKF_CYTOSCAPE_JS = """
         d.title,
         d.subtitle,
         d.summary,
+        d.interaction_summary,
         d.pmid,
         d.concept_id,
         JSON.stringify(d.assessments || [])
@@ -2006,6 +2276,10 @@ OKF_CYTOSCAPE_JS = """
           e.style("display", (sVis && tVis) ? "element" : "none");
         });
       });
+      const layoutSelect = document.getElementById("okf-layout-select");
+      if (!layoutSelect || layoutSelect.value === "genecup") {
+        runGeneCupRadialLayout();
+      }
     } else {
       renderFallbackSvg();
     }
@@ -2026,21 +2300,171 @@ OKF_CYTOSCAPE_JS = """
     }
   }
 
+  function computeGeneCupPositions() {
+    const w = Math.max(container.clientWidth * 1.45 || 1750, 1750);
+    const h = Math.max(container.clientHeight * 1.45 || 1350, 1350);
+    const posMap = {};
+
+    const visibleNodes = (graphData.nodes || []).map(n => n.data).filter(nodeMatchesFilters);
+    const genes = visibleNodes.filter(d => d.node_type === "gene");
+    const phenoHubs = visibleNodes.filter(d => d.node_type === "phenotype_hub");
+    const gwasHubs = visibleNodes.filter(d => d.node_type === "gwas_hub");
+    const concepts = visibleNodes.filter(d => d.node_type === "concept" || d.node_type === "emerging_concept");
+    const pmids = visibleNodes.filter(d => d.node_type === "pmid");
+
+    // Dual-Hub Bipartite/Radial Mode when Phenotype Hub is present
+    if (phenoHubs.length > 0) {
+      const gx = w * 0.14;
+      const gy = h * 0.50;
+      const px = w * 0.86;
+      const py = h * 0.50;
+      const cx = w * 0.50;
+
+      genes.forEach(d => { posMap[d.id] = { x: gx, y: gy }; });
+      phenoHubs.forEach(d => { posMap[d.id] = { x: px, y: py }; });
+      gwasHubs.forEach(d => { posMap[d.id] = { x: w * 0.14, y: h * 0.16 }; });
+
+      const overlapConcepts = concepts.filter(d => d.evidence_role === "overlap");
+      const geneOnlyConcepts = concepts.filter(d => d.evidence_role !== "overlap" && d.evidence_role !== "phenotype_only");
+      const phenoOnlyConcepts = concepts.filter(d => d.evidence_role === "phenotype_only");
+
+      const numCols = overlapConcepts.length > 28 ? 4 : (overlapConcepts.length > 14 ? 3 : (overlapConcepts.length > 6 ? 2 : 1));
+      const numRows = Math.max(1, Math.ceil(overlapConcepts.length / numCols));
+      const gridWidth = w * 0.38;
+      const gridHeight = h * 0.84;
+      const startX = cx - gridWidth / 2;
+      const startY = h * 0.08;
+      const colStep = numCols > 1 ? gridWidth / (numCols - 1) : 0;
+      const rowStep = numRows > 1 ? gridHeight / (numRows - 1) : 0;
+
+      overlapConcepts.forEach((d, idx) => {
+        const col = idx % numCols;
+        const row = Math.floor(idx / numCols);
+        const yBrickOffset = (numCols > 1 && col % 2 === 1) ? (rowStep * 0.45) : 0;
+        posMap[d.id] = {
+          x: (numCols === 1 ? cx : startX + col * colStep),
+          y: (numRows === 1 ? h * 0.50 : startY + row * rowStep + yBrickOffset)
+        };
+      });
+
+      const rGene = Math.min(w, h) * 0.25;
+      geneOnlyConcepts.forEach((d, idx) => {
+        const frac = geneOnlyConcepts.length === 1 ? 0.5 : idx / (geneOnlyConcepts.length - 1);
+        const angle = (Math.PI * 0.58) + frac * (Math.PI * 0.84);
+        posMap[d.id] = {
+          x: gx + rGene * Math.cos(angle),
+          y: gy + rGene * Math.sin(angle)
+        };
+      });
+
+      const rPheno = Math.min(w, h) * 0.25;
+      phenoOnlyConcepts.forEach((d, idx) => {
+        const frac = phenoOnlyConcepts.length === 1 ? 0.5 : idx / (phenoOnlyConcepts.length - 1);
+        const angle = (-Math.PI * 0.42) + frac * (Math.PI * 0.84);
+        posMap[d.id] = {
+          x: px + rPheno * Math.cos(angle),
+          y: py + rPheno * Math.sin(angle)
+        };
+      });
+
+      const rOuterX = w * 0.47;
+      const rOuterY = h * 0.46;
+      const pmidWithAngles = pmids.map((d, idx) => {
+        const cList = d.concepts || [];
+        let sx = 0, sy = 0, count = 0;
+        cList.forEach(c => {
+          const cp = posMap[c.id];
+          if (cp) {
+            sx += (cp.x - cx);
+            sy += (cp.y - (h * 0.50));
+            count++;
+          }
+        });
+        const prefAngle = count > 0 ? Math.atan2(sy / count, sx / count) : ((2 * Math.PI * idx) / Math.max(1, pmids.length) - Math.PI / 2);
+        return { data: d, prefAngle };
+      });
+      pmidWithAngles.sort((a, b) => a.prefAngle - b.prefAngle);
+      pmidWithAngles.forEach((item, idx) => {
+        const baseAngle = (2 * Math.PI * idx) / Math.max(1, pmidWithAngles.length) - Math.PI / 2;
+        posMap[item.data.id] = {
+          x: cx + rOuterX * Math.cos(baseAngle),
+          y: (h * 0.50) + rOuterY * Math.sin(baseAngle)
+        };
+      });
+
+      return posMap;
+    }
+
+    // Fallback Single-Hub Radial Mode
+    const cx = w / 2;
+    const cyPos = h / 2;
+    const rInner = Math.min(w, h) * 0.25;
+    const rOuter = Math.min(w, h) * 0.44;
+
+    genes.forEach(d => { posMap[d.id] = { x: cx, y: cyPos }; });
+    gwasHubs.forEach(d => { posMap[d.id] = { x: cx - rInner * 0.75, y: cyPos - rInner * 0.75 }; });
+
+    const conceptAngles = {};
+    concepts.forEach((d, idx) => {
+      const angle = (2 * Math.PI * idx) / Math.max(1, concepts.length) - Math.PI / 2;
+      conceptAngles[d.id] = angle;
+      posMap[d.id] = {
+        x: cx + rInner * Math.cos(angle),
+        y: cyPos + rInner * Math.sin(angle)
+      };
+    });
+
+    const pmidWithAngles = pmids.map((d, idx) => {
+      const cList = d.concepts || [];
+      let sx = 0, sy = 0, count = 0;
+      cList.forEach(c => {
+        if (conceptAngles[c.id] !== undefined) {
+          sx += Math.cos(conceptAngles[c.id]);
+          sy += Math.sin(conceptAngles[c.id]);
+          count++;
+        }
+      });
+      const prefAngle = count > 0 ? Math.atan2(sy / count, sx / count) : ((2 * Math.PI * idx) / Math.max(1, pmids.length) - Math.PI / 2);
+      return { data: d, prefAngle };
+    });
+
+    pmidWithAngles.sort((a, b) => a.prefAngle - b.prefAngle);
+    pmidWithAngles.forEach((item, idx) => {
+      const baseAngle = (2 * Math.PI * idx) / Math.max(1, pmidWithAngles.length) - Math.PI / 2;
+      posMap[item.data.id] = {
+        x: cx + rOuter * Math.cos(baseAngle),
+        y: cyPos + rOuter * Math.sin(baseAngle)
+      };
+    });
+
+    return posMap;
+  }
+
+  function runGeneCupRadialLayout() {
+    if (!cy) return;
+    const posMap = computeGeneCupPositions();
+    cy.nodes().positions(node => posMap[node.id()] || { x: 400, y: 300 });
+    cy.fit(cy.elements(':visible'), 36);
+  }
+
   function runLayout(layoutName) {
     if (!cy) return;
+    if (layoutName === "genecup") {
+      runGeneCupRadialLayout();
+      return;
+    }
     let opts = { name: layoutName, animate: true, animationDuration: 350, padding: 36 };
     if (layoutName === "cose") {
       opts = Object.assign(opts, {
-        idealEdgeLength: 95,
-        nodeOverlap: 20,
-        nodeRepulsion: 450000,
-        gravity: 60
+        idealEdgeLength: 135,
+        nodeOverlap: 32,
+        nodeRepulsion: 650000,
+        gravity: 45
       });
     } else if (layoutName === "concentric") {
       opts.concentric = function(node) {
         const nt = node.data("node_type");
-        if (nt === "gene") return 4;
-        if (nt === "category") return 3;
+        if (nt === "gene") return 3;
         if (nt === "concept" || nt === "emerging_concept") return 2;
         return 1;
       };
@@ -2053,46 +2477,27 @@ OKF_CYTOSCAPE_JS = """
     const visibleNodes = (graphData.nodes || []).map(n => n.data).filter(nodeMatchesFilters);
     const visibleIds = new Set(visibleNodes.map(d => d.id));
     const visibleEdges = (graphData.edges || []).map(e => e.data).filter(e => visibleIds.has(e.source) && visibleIds.has(e.target));
-    const w = container.clientWidth || 720;
-    const h = container.clientHeight || 580;
-    const cx = w / 2;
-    const cyPos = h / 2;
-    const posMap = {};
-
-    const tiers = {
-      gene: visibleNodes.filter(d => d.node_type === "gene"),
-      category: visibleNodes.filter(d => d.node_type === "category"),
-      concept: visibleNodes.filter(d => d.node_type === "concept" || d.node_type === "emerging_concept"),
-      pmid: visibleNodes.filter(d => d.node_type === "pmid")
-    };
-
-    tiers.gene.forEach(d => { posMap[d.id] = { x: cx, y: cyPos }; });
-    const placeRing = (arr, radius) => {
-      arr.forEach((d, idx) => {
-        const angle = (2 * Math.PI * idx) / Math.max(1, arr.length) - Math.PI / 2;
-        posMap[d.id] = { x: cx + radius * Math.cos(angle), y: cyPos + radius * Math.sin(angle) };
-      });
-    };
-    placeRing(tiers.category, Math.min(w, h) * 0.17);
-    placeRing(tiers.concept, Math.min(w, h) * 0.31);
-    placeRing(tiers.pmid, Math.min(w, h) * 0.43);
+    const w = container.clientWidth || 760;
+    const h = container.clientHeight || 620;
+    const posMap = computeGeneCupPositions();
 
     const edgeSvg = visibleEdges.map(e => {
-      const p1 = posMap[e.source] || { x: cx, y: cyPos };
-      const p2 = posMap[e.target] || { x: cx, y: cyPos };
-      const isCo = e.edge_type === "cooccurrence";
-      const stroke = isCo ? "#ff79c6" : "#4c566a";
-      const dash = isCo ? 'stroke-dasharray="5,4"' : "";
-      return `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${stroke}" stroke-width="${isCo ? 2 : 1.3}" stroke-opacity="0.65" ${dash} />`;
+      const p1 = posMap[e.source] || { x: w / 2, y: h / 2 };
+      const p2 = posMap[e.target] || { x: w / 2, y: h / 2 };
+      const stroke = e.color || (e.edge_type === "cooccurrence" ? "#ff79c6" : "#4c566a");
+      const dash = e.edge_type === "cooccurrence" ? 'stroke-dasharray="5,4"' : "";
+      const sw = e.edge_type === "gene_concept" ? 3 : 1.6;
+      return `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" stroke="${escapeHtml(stroke)}" stroke-width="${sw}" stroke-opacity="0.72" ${dash} />`;
     }).join("");
 
     const nodeSvg = visibleNodes.map(d => {
-      const p = posMap[d.id] || { x: cx, y: cyPos };
-      const r = Math.max(9, (d.size || 24) / 2.1);
+      const p = posMap[d.id] || { x: w / 2, y: h / 2 };
+      const r = Math.max(12, (d.size || 28) / 1.9);
       const fill = d.color || "#88c0d0";
+      const fs = d.node_type === "gene" ? 18 : (d.node_type === "pmid" ? 12 : 14);
       return `<g class="okf-svg-node" data-node-id="${escapeHtml(d.id)}" style="cursor:pointer;">
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${escapeHtml(fill)}" stroke="#14171d" stroke-width="2" />
-        <text x="${p.x.toFixed(1)}" y="${(p.y + r + 12).toFixed(1)}" text-anchor="middle" fill="#faf4e6" font-size="11px" font-weight="600">${escapeHtml(d.label)}</text>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}" fill="${escapeHtml(fill)}" stroke="#14171d" stroke-width="2.5" />
+        <text x="${p.x.toFixed(1)}" y="${(p.y + r + 15).toFixed(1)}" text-anchor="middle" fill="#ffffff" font-size="${fs}px" font-weight="700">${escapeHtml(d.label)}</text>
       </g>`;
     }).join("");
 
@@ -2107,6 +2512,7 @@ OKF_CYTOSCAPE_JS = """
 
   function initGraph() {
     if (window.cytoscape) {
+      const initialPositions = computeGeneCupPositions();
       cy = window.cytoscape({
         container: container,
         elements: {
@@ -2121,73 +2527,130 @@ OKF_CYTOSCAPE_JS = """
               "background-color": "data(color)",
               "width": "data(size)",
               "height": "data(size)",
-              "color": "#faf4e6",
-              "font-size": "11px",
-              "font-weight": "600",
+              "color": "#ffffff",
+              "font-size": "17px",
+              "font-weight": "700",
+              "text-wrap": "wrap",
+              "text-max-width": "135px",
+              "line-height": 1.18,
               "text-valign": "bottom",
               "text-halign": "center",
-              "text-margin-y": 5,
-              "text-outline-width": 2,
+              "text-margin-y": 6,
+              "text-outline-width": 3,
               "text-outline-color": "#14171d",
-              "border-width": 2,
+              "border-width": 2.5,
               "border-color": "#2e3440"
             }
           },
           {
             selector: 'node[node_type = "gene"]',
             style: {
-              "shape": "octagon",
-              "border-width": 3,
-              "border-color": "#88c0d0",
-              "font-size": "13px"
+              "shape": "ellipse",
+              "border-width": 5,
+              "border-color": "#ffffff",
+              "font-size": "24px",
+              "font-weight": "800",
+              "text-wrap": "wrap",
+              "text-max-width": "160px",
+              "text-valign": "center",
+              "text-halign": "center",
+              "text-margin-y": 0
             }
           },
           {
-            selector: 'node[node_type = "category"]',
+            selector: 'node[node_type = "phenotype_hub"]',
             style: {
-              "shape": "round-hexagon",
-              "font-size": "12px"
+              "shape": "hexagon",
+              "border-width": 5,
+              "border-color": "#ffffff",
+              "font-size": "20px",
+              "font-weight": "800",
+              "text-wrap": "wrap",
+              "text-max-width": "165px",
+              "text-valign": "bottom",
+              "text-halign": "center",
+              "text-margin-y": 8
+            }
+          },
+          {
+            selector: 'node[node_type = "gwas_hub"]',
+            style: {
+              "shape": "octagon",
+              "border-width": 4,
+              "border-color": "#ffffff",
+              "font-size": "17px",
+              "font-weight": "700",
+              "text-wrap": "wrap",
+              "text-max-width": "145px"
+            }
+          },
+          {
+            selector: 'node[evidence_role = "overlap"]',
+            style: {
+              "border-width": 4,
+              "border-color": "#ebcb8b"
             }
           },
           {
             selector: 'node[node_type = "emerging_concept"]',
             style: {
               "shape": "diamond",
-              "border-width": 3,
-              "border-color": "#ffffff"
+              "border-width": 4,
+              "border-color": "#ffffff",
+              "font-size": "17px",
+              "text-wrap": "wrap",
+              "text-max-width": "150px"
             }
           },
           {
             selector: 'node[node_type = "pmid"]',
             style: {
               "shape": "round-rectangle",
-              "font-size": "10px",
-              "background-opacity": 0.85
+              "font-size": "14px",
+              "font-weight": "600",
+              "text-wrap": "wrap",
+              "text-max-width": "115px",
+              "background-opacity": 0.9
             }
           },
           {
             selector: 'node[primary_direction = "increase"]',
             style: {
               "border-color": "#a3be8c",
-              "border-width": 2.5
+              "border-width": 3.5
             }
           },
           {
             selector: 'node[primary_direction = "decrease"]',
             style: {
               "border-color": "#bf616a",
-              "border-width": 2.5
+              "border-width": 3.5
             }
           },
           {
             selector: "edge",
             style: {
-              "width": 1.6,
-              "line-color": "#4c566a",
-              "target-arrow-color": "#4c566a",
-              "target-arrow-shape": "triangle",
+              "width": 2.0,
+              "line-color": "data(color)",
+              "target-arrow-color": "data(color)",
+              "target-arrow-shape": "none",
               "curve-style": "bezier",
               "opacity": 0.72
+            }
+          },
+          {
+            selector: 'edge[edge_type = "gene_concept"], edge[edge_type = "phenotype_concept"], edge[edge_type = "gene_gwas"]',
+            style: {
+              "width": "data(weight)",
+              "opacity": 0.88,
+              "curve-style": "straight"
+            }
+          },
+          {
+            selector: 'edge[edge_type = "concept_pmid"]',
+            style: {
+              "width": 1.8,
+              "opacity": 0.52
             }
           },
           {
@@ -2197,17 +2660,13 @@ OKF_CYTOSCAPE_JS = """
               "line-color": "#ff79c6",
               "target-arrow-shape": "none",
               "width": 2.2,
-              "label": "data(label)",
-              "font-size": "9px",
-              "color": "#ff79c6",
-              "text-outline-width": 2,
-              "text-outline-color": "#14171d"
+              "opacity": 0.45
             }
           },
           {
             selector: ".okf-dimmed",
             style: {
-              "opacity": 0.2
+              "opacity": 0.16
             }
           },
           {
@@ -2218,7 +2677,10 @@ OKF_CYTOSCAPE_JS = """
           }
         ],
         layout: {
-          name: "cose",
+          name: "preset",
+          positions: function(node) {
+            return initialPositions[node.id()] || { x: 400, y: 300 };
+          },
           padding: 36,
           animate: false
         }
@@ -2227,6 +2689,19 @@ OKF_CYTOSCAPE_JS = """
       cy.on("tap", "node", evt => {
         const n = evt.target;
         selectNodeById(n.id());
+      });
+
+      cy.on("mouseover", 'node[node_type = "pmid"]', evt => {
+        const d = evt.target.data();
+        if (d && d.pmid && window.showPmidTooltip && evt.originalEvent) {
+          window.showPmidTooltip(d.pmid, evt.originalEvent);
+        }
+      });
+
+      cy.on("mouseout", 'node[node_type = "pmid"]', () => {
+        if (window.hidePmidTooltip) {
+          window.hidePmidTooltip();
+        }
       });
 
       cy.on("tap", evt => {
@@ -2238,7 +2713,6 @@ OKF_CYTOSCAPE_JS = """
       renderFallbackSvg();
     }
 
-    // Default initial selection: first concept/emerging mini-review or gene node
     const firstConcept = (graphData.nodes || []).find(
       n => n.data && (n.data.node_type === "concept" || n.data.node_type === "emerging_concept")
     );
@@ -2248,7 +2722,6 @@ OKF_CYTOSCAPE_JS = """
     }
   }
 
-  // Bind UI toolbar controls
   const searchInput = document.getElementById("okf-graph-search");
   if (searchInput) {
     searchInput.addEventListener("input", e => {
@@ -2276,7 +2749,15 @@ OKF_CYTOSCAPE_JS = """
   const layoutSelect = document.getElementById("okf-layout-select");
   if (layoutSelect) {
     layoutSelect.addEventListener("change", e => {
-      runLayout(e.target.value || "cose");
+      runLayout(e.target.value || "genecup");
+    });
+  }
+
+  const toggleGwas = document.getElementById("okf-toggle-gwas");
+  if (toggleGwas) {
+    toggleGwas.addEventListener("change", e => {
+      showGwasNode = Boolean(e.target.checked);
+      applyFilters();
     });
   }
 
@@ -2288,12 +2769,42 @@ OKF_CYTOSCAPE_JS = """
     });
   }
 
+  const showAllCatsBtn = document.getElementById("okf-show-all-cats-btn");
+  if (showAllCatsBtn) {
+    showAllCatsBtn.addEventListener("click", () => {
+      allCategoriesList.forEach(c => activeCategories.add(c));
+      document.querySelectorAll(".okf-cat-pill").forEach(pill => {
+        pill.classList.remove("inactive");
+        pill.classList.add("active");
+      });
+      showGwasNode = true;
+      if (toggleGwas) toggleGwas.checked = true;
+      applyFilters();
+    });
+  }
+
+  const hideAllCatsBtn = document.getElementById("okf-hide-all-cats-btn");
+  if (hideAllCatsBtn) {
+    hideAllCatsBtn.addEventListener("click", () => {
+      activeCategories.clear();
+      document.querySelectorAll(".okf-cat-pill").forEach(pill => {
+        pill.classList.remove("active");
+        pill.classList.add("inactive");
+      });
+      showGwasNode = false;
+      if (toggleGwas) toggleGwas.checked = false;
+      showPmidLeaves = false;
+      if (togglePmids) togglePmids.checked = false;
+      applyFilters();
+    });
+  }
+
   const fitBtn = document.getElementById("okf-fit-btn");
   if (fitBtn) {
     fitBtn.addEventListener("click", () => {
       if (cy) {
         cy.elements().removeClass("okf-dimmed okf-highlighted");
-        cy.fit(undefined, 36);
+        cy.fit(cy.elements(':visible'), 36);
       } else {
         renderFallbackSvg();
       }
@@ -2318,12 +2829,13 @@ OKF_CYTOSCAPE_JS = """
   });
 
   initGraph();
+  applyFilters();
 })();
 """
 
 
 def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: str = "./") -> tuple[str, dict]:
-    """Build the interactive OKF HTML body combining the Obsidian-style Cytoscape visualizer and collapsible ontology sections."""
+    """Build the interactive OKF HTML body combining the Dual-Hub Cytoscape visualizer and collapsible ontology sections."""
     graph_path = ws / "corpus" / "okf_graph.json"
     graph_data = {}
     if graph_path.exists():
@@ -2371,10 +2883,10 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
   <div class="okf-toolbar">
     <input type="text" id="okf-graph-search" class="okf-search-input" placeholder="Search concepts, emerging topics, PMIDs, authors, or findings..." />
     <select id="okf-layout-select" class="okf-select" title="Graph Layout">
+      <option value="genecup">Layout: GeneCup Radial Hub</option>
       <option value="cose">Layout: Force-Directed (Obsidian)</option>
       <option value="concentric">Layout: Concentric Hierarchy</option>
       <option value="circle">Layout: Circle</option>
-      <option value="breadthfirst">Layout: Breadthfirst Tree</option>
     </select>
     <select id="okf-species-filter" class="okf-select" title="Filter by Species">
       <option value="all">Species: All</option>
@@ -2390,18 +2902,23 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
       <option value="mixed">Direction: Mixed</option>
     </select>
     <label style="font-size:0.82em;display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
-      <input type="checkbox" id="okf-toggle-pmids" checked /> Show PMID Nodes
+      <input type="checkbox" id="okf-toggle-gwas" checked /> Show GWAS Node
+    </label>
+    <label style="font-size:0.82em;display:inline-flex;align-items:center;gap:5px;cursor:pointer;">
+      <input type="checkbox" id="okf-toggle-pmids" /> Show PMID Nodes
     </label>
     <button type="button" id="okf-fit-btn" class="tree-toggle-btn">Reset / Fit Graph</button>
   </div>
   <div class="okf-category-bar">
     <span style="font-size:0.78em;color:var(--text-muted);margin-right:4px;font-weight:600;">Categories (click to toggle):</span>
+    <button type="button" id="okf-show-all-cats-btn" class="tree-toggle-btn" style="padding:3px 9px;font-size:0.75em;">Show All</button>
+    <button type="button" id="okf-hide-all-cats-btn" class="tree-toggle-btn" style="padding:3px 9px;font-size:0.75em;">Hide All</button>
     {"".join(cat_pills)}
   </div>
   <div class="okf-visualizer-layout">
     <div id="cy-graph"></div>
     <aside id="okf-side-panel">
-      <div class="okf-panel-subtitle">Click any Concept Mini-Review, Emerging Topic, or PMID node in the graph to inspect its synthesis and verbatim evidence.</div>
+      <div class="okf-panel-subtitle">Click any Concept Review, Emerging Topic, or PMID node in the graph to inspect its synthesis and verbatim evidence.</div>
     </aside>
   </div>
 </div>
@@ -2416,7 +2933,6 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
         href = a["href"]
         if href.endswith(".md") or ".md#" in href:
             href = re.sub(r"\.md(\b|#)", r".html\1", href)
-        # If rendered at root okf.html (url_prefix == "./"), rewrite ./concepts/... and ./<pmid>.html to ./okf/...
         if url_prefix == "./" and (href.startswith("./concepts/") or re.match(r"^\./\d+\.html", href)):
             href = "./okf/" + href[2:]
         a["href"] = href
@@ -2432,8 +2948,8 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
                 classes.append("pmid-link")
             a["class"] = classes
 
-    # Convert H3 category sections under 'Ontology and Emerging Topic Mini-Reviews' into collapsible details branches
-    h2_ont = next((h for h in soup.find_all("h2") if "Mini-Reviews" in h.get_text()), None)
+    # Convert H3 category sections under 'Ontology and Emerging Topic Reviews' (or Mini-Reviews) into collapsible details branches
+    h2_ont = next((h for h in soup.find_all("h2") if "Reviews" in h.get_text()), None)
     if h2_ont:
         controls_div = BeautifulSoup(
             '<div class="tree-controls" style="margin-bottom:12px;">'
@@ -2446,7 +2962,7 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
 
         for h3 in list(soup.find_all("h3")):
             heading_text = h3.get_text()
-            cat_match = re.search(r"\(`([a-z_]+)`\)", heading_text)
+            cat_match = re.search(r"\(`?([a-z_]+)`?\)", heading_text)
             cat_key = cat_match.group(1) if cat_match else "other"
             cat_color = cat_colors.get(cat_key, "#88c0d0")
 
@@ -2458,7 +2974,7 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
                 curr = nxt
 
             details_html = (
-                f'<details class="tree-branch okf-cat-branch" open style="margin-bottom:12px;border-left:4px solid {cat_color};">'
+                f'<details class="tree-branch okf-cat-branch" style="margin-bottom:12px;border-left:4px solid {cat_color};">'
                 f'<summary class="tree-summary"><div class="tree-summary-left">'
                 f'<span class="tree-arrow">&#9654;</span>'
                 f'<span class="tree-category-name">{html.escape(heading_text)}</span>'
@@ -2470,6 +2986,40 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
             for el in branch_elems:
                 body_div.append(el)
             h3.replace_with(details_tag)
+
+    # Convert Atomic Reference Notes H2 section into a collapsible details block
+    h2_atomic = next((h for h in soup.find_all("h2") if "Reference Notes" in h.get_text()), None)
+    if h2_atomic:
+        atomic_elems = []
+        curr = h2_atomic.next_sibling
+        while curr and getattr(curr, "name", None) != "h2":
+            nxt = curr.next_sibling
+            atomic_elems.append(curr.extract())
+            curr = nxt
+        cnt_match = re.search(r"\((\d+)\)", h2_atomic.get_text())
+        cnt_str = cnt_match.group(1) if cnt_match else ""
+        if not cnt_str:
+            row_cnt = sum(max(0, len(el.find_all("tr")) - 1) for el in atomic_elems if hasattr(el, "find_all"))
+            if row_cnt > 0:
+                cnt_str = str(row_cnt)
+        badge_html = (
+            f' <span class="badge-stat" style="margin-left:8px;"><strong>{cnt_str}</strong> references (click to expand)</span>'
+            if cnt_str
+            else ""
+        )
+        atomic_details_html = (
+            f'<details class="tree-branch okf-atomic-branch" style="margin-top:24px;border-left:4px solid #81a1c1;">'
+            f'<summary class="tree-summary"><div class="tree-summary-left">'
+            f'<span class="tree-arrow">&#9654;</span>'
+            f'<span class="tree-category-name">Atomic Reference Notes</span>{badge_html}'
+            f'</div></summary>'
+            f'<div class="tree-branch-body"></div></details>'
+        )
+        atomic_tag = BeautifulSoup(atomic_details_html, "html.parser").find("details")
+        atomic_body = atomic_tag.find("div", class_="tree-branch-body")
+        for el in atomic_elems:
+            atomic_body.append(el)
+        h2_atomic.replace_with(atomic_tag)
 
     # Insert the Cytoscape visualizer right before the first H2
     first_h2 = soup.find("h2")
@@ -2503,7 +3053,7 @@ def render_okf_html_pages(ws: Path, gene_symbol: str, pmid_cache: dict, nav_page
             f"<script>{OKF_CYTOSCAPE_JS}</script>"
         )
         page_html = render_html_page(
-            f"{gene_symbol} - Open Knowledge (OKF)",
+            f"{gene_symbol} - Knowledge Graph",
             body_html,
             "okf",
             gene_symbol,
@@ -2548,8 +3098,8 @@ def render_okf_html_pages(ws: Path, gene_symbol: str, pmid_cache: dict, nav_page
     return generated_okf
 
 
-def render_workspace_html(workspace_path):
-    """Render all core workspace markdown files to interactive HTML."""
+def render_workspace_html(workspace_path, create_zip: bool = False):
+    """Render all core workspace markdown files to interactive HTML and optionally create a shareable ZIP archive."""
     ws = Path(workspace_path).resolve()
     context_path = ws / "corpus" / "context.json"
     gene_symbol = "wasp-lit"
@@ -2562,12 +3112,12 @@ def render_workspace_html(workspace_path):
         except Exception:
             pass
 
-    # Refresh OKF bundle if human confirmation was recorded or okf/index.md exists
+    # Export OKF bundle only if human confirmation was recorded AND okf/index.md does not yet exist
     try:
         from okf_export import is_okf_confirmed, export_okf
         from wasp_core import Store
         store = Store(str(ws))
-        if is_okf_confirmed(store) or (ws / "okf" / "index.md").exists():
+        if is_okf_confirmed(store) and (not (ws / "okf" / "index.md").exists() or not (ws / "corpus" / "okf_graph.json").exists()):
             export_okf(store)
     except Exception:
         pass
@@ -2576,21 +3126,30 @@ def render_workspace_html(workspace_path):
     try:
         generate_ontology_markdown(ws)
     except Exception as e:
-        sys.stderr.write(f"Notice: Could not generate ontology.md ({e}).\\n")
+        sys.stderr.write(f"Notice: Could not generate ontology.md ({e}).\n")
 
-    # Collect any PMIDs mentioned across markdown files (including okf/)
-    extra_pmids = set()
-    for md_file in list(ws.glob("*.md")) + list((ws / "okf").rglob("*.md") if (ws / "okf").exists() else []):
-        txt = md_file.read_text(encoding="utf-8")
-        for num in re.findall(r"\b\d{7,8}\b", txt):
-            extra_pmids.add(num)
+    # Collect known PMIDs from corpus/articles.jsonl for plain-text PMID link tagging
+    known_pmids = set()
+    articles_path = ws / "corpus" / "articles.jsonl"
+    if articles_path.exists():
+        with open(articles_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    art = json.loads(line)
+                    if art.get("pmid"):
+                        known_pmids.add(str(art["pmid"]))
+                except Exception:
+                    pass
 
-    corpus_dir = ws / "corpus"
-    pmid_cache = extract_pubmed_cache_from_corpus(corpus_dir, extra_pmids=extra_pmids)
-
-    # Also save pmid-cache.js in workspace for external or local asset use
+    # Remove obsolete pmid-cache.js if present
     cache_js_path = ws / "pmid-cache.js"
-    cache_js_path.write_text(f"window.pmidCache = {json.dumps(pmid_cache, indent=2, ensure_ascii=False)};\n", encoding="utf-8")
+    if cache_js_path.exists():
+        try:
+            cache_js_path.unlink()
+        except OSError:
+            pass
 
     nav_pages = get_nav_pages(ws)
     generated = []
@@ -2604,7 +3163,7 @@ def render_workspace_html(workspace_path):
             if fallback.exists():
                 md_file = fallback
         if md_file.exists():
-            out_file = process_markdown_file(md_file, ws, gene_symbol, pmid_cache, nav_pages=nav_pages)
+            out_file = process_markdown_file(md_file, ws, gene_symbol, known_pmids, nav_pages=nav_pages)
             generated.append(str(out_file))
             if md_file.name == "human-decisions.md":
                 user_html = ws / "user-decisions.html"
@@ -2613,22 +3172,40 @@ def render_workspace_html(workspace_path):
 
     # Render OKF tab, Cytoscape visualizer, concept mini-reviews, and atomic reference HTML files if present
     if (ws / "okf" / "index.md").exists():
-        generated.extend(render_okf_html_pages(ws, gene_symbol, pmid_cache, nav_pages))
+        generated.extend(render_okf_html_pages(ws, gene_symbol, known_pmids, nav_pages))
 
-    return {
+    zip_path_str = None
+    if create_zip:
+        import zipfile
+        zip_path = ws / f"{ws.name}-shareable.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for html_file in sorted(ws.rglob("*.html")):
+                rel = html_file.relative_to(ws).as_posix()
+                zf.write(html_file, rel)
+            corpus_dir = ws / "corpus"
+            if corpus_dir.exists():
+                for c_file in sorted(corpus_dir.rglob("*")):
+                    if c_file.is_file():
+                        rel = c_file.relative_to(ws).as_posix()
+                        zf.write(c_file, rel)
+        zip_path_str = str(zip_path)
+
+    result = {
         "workspace": str(ws),
         "gene": gene_symbol,
-        "pmids_cached": len(pmid_cache),
         "generated_html_files": generated,
-        "cache_js": str(cache_js_path),
     }
+    if zip_path_str:
+        result["shareable_zip"] = zip_path_str
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("workspace", help="Path to wasp-lit research workspace")
+    parser.add_argument("--zip", action="store_true", help="Package HTML portal and corpus into <workspace>-shareable.zip")
     args = parser.parse_args()
-    res = render_workspace_html(args.workspace)
+    res = render_workspace_html(args.workspace, create_zip=args.zip)
     print(json.dumps(res, indent=2))
 
 

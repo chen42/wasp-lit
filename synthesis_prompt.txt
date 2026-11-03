@@ -17,7 +17,12 @@ Assess direct evidence and gene-to-pathway-to-phenotype or gene-to-gene-to-pheno
 5. Genetic associations
 Report the separate GWAS Catalog results or blocker, with trait definitions, variants, effect alleles, statistics, study accessions and PMIDs. Gene mapping is locus-level evidence, not causal assignment. Do not infer channel activation or inhibition from an association without functional evidence; zero captured records do not prove no effect.
 
-6. Assessment
-End with a balanced candidate-plausibility judgment, the best-supported mechanism and the remaining unsupported links. Distinguish plausibility from causality, necessity or sufficiency. Do not open with the conclusion or add a generic limitations section.
+6. Limitations and Future Experimental Tests
+Summarize key evidentiary gaps, then propose two tiers of experimental tests:
+- Core Mechanistic and Circuit Validation Experiments: Direct falsifiable tests of the primary Gene x Phenotype convergence pathways (such as allelic replacement of GWAS variants, cell-type-specific perturbations in overlapping brain hubs, and stage-specific behavioral assays).
+- Exploratory Bipartite Hypotheses (High-Impact Mechanistic Bridges): Systematic literature-based discovery (Swanson A-B-C links) mined from the bipartite graph across (a) asymmetric overlap concepts (where both the Gene Arm and Phenotype Arm have confirmed literature, but the Gene Arm's specific molecular/cellular mechanism has never been tested in the Phenotype Arm's behavioral model) and (b) one-sided concepts (`gene_only` or `phenotype_only` hubs bridged by a specific molecular substrate, receptor, or circuit projection). Do not use numerical points (`1.`, `2.`, `3.`) for the hypotheses; present each hypothesis under an unnumbered `####` subheading followed by cohesive prose covering the bipartite premise (specific Gene Arm PMIDs `A -> B` and Phenotype Arm PMIDs `B -> C`), the mechanistic rationale, and the experimental design and falsifiable readouts.
+
+7. Assessment
+End with a balanced candidate-plausibility judgment, the best-supported mechanism and the remaining unsupported links. Distinguish plausibility from causality, necessity or sufficiency. Do not open with the conclusion.
 
 Save the synthesis and source-review/claim ledger with source versions, checksums and passage locations. State the limits of source review and publication-status checks.

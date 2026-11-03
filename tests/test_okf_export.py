@@ -189,50 +189,65 @@ class TestOkfExport(unittest.TestCase):
         res = self.store.render_okf(confirm=True)
         self.assertEqual(res["included_count"], 2)
         self.assertEqual(res["concept_mini_reviews_count"], 2)
-        self.assertGreaterEqual(res["emerging_topics_count"], 2)
+        self.assertGreaterEqual(res["emerging_topics_count"], 1)
 
-        # Check atomic reference notes exist and link to Concept Mini-Reviews
+        # Check atomic reference notes exist and link to Concept Reviews
         ref_file = self.ws / "okf" / "29384712.md"
         self.assertTrue(ref_file.exists())
         ref_text = ref_file.read_text(encoding="utf-8")
         self.assertIn("type: Reference", ref_text)
-        self.assertIn("## Linked Concept and Emerging Topic Mini-Reviews", ref_text)
+        self.assertIn("## Linked Concept and Emerging Topic Reviews", ref_text)
         self.assertIn("./concepts/drug--opioids.md", ref_text)
         self.assertIn("./concepts/brain--nucleus_accumbens.md", ref_text)
         self.assertIn("./concepts/emerging--striatal-cfos-plasticity.md", ref_text)
         self.assertIn("- **Direction of Effect**: increase", ref_text)
         self.assertIn("[Reference 30192834", ref_text)
 
-        # Check Ontology Concept Mini-Review content
+        # Check Ontology Concept Review content
         drug_mr = self.ws / "okf" / "concepts" / "drug--opioids.md"
         self.assertTrue(drug_mr.exists())
         drug_mr_text = drug_mr.read_text(encoding="utf-8")
         self.assertIn("type: Concept", drug_mr_text)
-        self.assertIn("## Mini-Review Synthesis", drug_mr_text)
+        self.assertIn("## Concept Synthesis", drug_mr_text)
+        self.assertNotIn("Across the screened literature corpus", drug_mr_text)
+        self.assertIn("### Relationships in Context", drug_mr_text)
+        self.assertIn("\u27f6", drug_mr_text)
+        self.assertNotIn("- **Cause**:", drug_mr_text)
+        self.assertNotIn("- **Effect (Direction)**:", drug_mr_text)
+        self.assertNotIn("- **Consequence**:", drug_mr_text)
+        self.assertIn("- **Context**:", drug_mr_text)
+        self.assertIn("rat (1), mouse (1)", drug_mr_text)
         self.assertIn("29384712.md", drug_mr_text)
         self.assertIn("30192834.md", drug_mr_text)
         self.assertIn("brain/nucleus_accumbens", drug_mr_text)
 
-        # Check Emerging Topic Mini-Review content
+        # Check index.md species counts format
+        idx_text = (self.ws / "okf" / "index.md").read_text(encoding="utf-8")
+        self.assertIn("rat (1), mouse (1)", idx_text)
+
+        # Check Emerging Topic Review content (written as a small review article, not Relationships in Context)
         em_mr = self.ws / "okf" / "concepts" / "emerging--striatal-cfos-plasticity.md"
         self.assertTrue(em_mr.exists())
         em_mr_text = em_mr.read_text(encoding="utf-8")
-        self.assertIn("Emerging Topic Mini-Review", em_mr_text)
+        self.assertIn("Emerging Topic Review", em_mr_text)
         self.assertIn("Striatal Immediate-Early Gene Plasticity", em_mr_text)
+        self.assertNotIn("### Relationships in Context", em_mr_text)
+        self.assertIn("PMID 29384712", em_mr_text)
 
-        # Check Cytoscape graph JSON
+        # Check Cytoscape graph JSON (GeneCup style: gene in center connected directly to concepts)
         graph_path = self.ws / "corpus" / "okf_graph.json"
         self.assertTrue(graph_path.exists())
         graph_data = json.loads(graph_path.read_text(encoding="utf-8"))
         self.assertEqual(graph_data["category_colors"]["emerging"], "#ff79c6")
         node_types = {n["data"]["node_type"] for n in graph_data["nodes"]}
         self.assertIn("gene", node_types)
-        self.assertIn("category", node_types)
+        self.assertNotIn("category", node_types)
         self.assertIn("concept", node_types)
         self.assertIn("emerging_concept", node_types)
         self.assertIn("pmid", node_types)
         edge_types = {e["data"]["edge_type"] for e in graph_data["edges"]}
-        self.assertIn("cooccurrence", edge_types)
+        self.assertIn("gene_concept", edge_types)
+        self.assertNotIn("cooccurrence", edge_types)
 
         # Check HTML rendering includes Open Knowledge (OKF) tab and Cytoscape visualizer
         html_res = self.store.render_html()
@@ -247,9 +262,16 @@ class TestOkfExport(unittest.TestCase):
         self.assertIsNotNone(soup.find("div", id="cy-graph"))
         self.assertIsNotNone(soup.find("aside", id="okf-side-panel"))
         self.assertIsNotNone(soup.find("span", attrs={"data-category": "emerging"}))
+        toggle_pmids = soup.find("input", id="okf-toggle-pmids")
+        self.assertIsNotNone(toggle_pmids)
+        self.assertFalse(toggle_pmids.has_attr("checked"))
+        cat_branches = soup.find_all("details", class_="okf-cat-branch")
+        self.assertGreater(len(cat_branches), 0)
+        for cb in cat_branches:
+            self.assertFalse(cb.has_attr("open"))
         active_nav = soup.find("a", class_="nav-link active")
         self.assertIsNotNone(active_nav)
-        self.assertEqual(active_nav.text, "Open Knowledge (OKF)")
+        self.assertEqual(active_nav.text, "Knowledge Graph")
 
         # Verify Markdown audit passes with zero errors
         self.assertEqual(self.store.audit_markdown(), [])

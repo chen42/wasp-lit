@@ -62,10 +62,16 @@ class RenderHtmlTests(unittest.TestCase):
         self.assertIn("synthesis.html", res["generated_html_files"][0])
         self.assertTrue((self.workspace / "synthesis.html").is_file())
         self.assertTrue((self.workspace / "gene-function.html").is_file())
-        self.assertTrue((self.workspace / "pmid-cache.js").is_file())
+        self.assertFalse((self.workspace / "pmid-cache.js").is_file())
 
         html_content = (self.workspace / "synthesis.html").read_text(encoding="utf-8")
         soup = BeautifulSoup(html_content, "html.parser")
+
+        # 0. Check wasp-lit GitHub brand link and embedded icon in top-left nav
+        brand_link = soup.find("a", class_="nav-brand-link")
+        self.assertIsNotNone(brand_link)
+        self.assertEqual(brand_link["href"], "https://github.com/chen42/wasp-lit")
+        self.assertIsNotNone(brand_link.find("img", class_="nav-brand-icon"))
 
         # 1. Check high-contrast dark theme CSS variables with warm ivory (yellow-tinted white) font
         self.assertIn("--bg-color: #14171d;", html_content)
@@ -93,10 +99,9 @@ class RenderHtmlTests(unittest.TestCase):
         self.assertIsNotNone(active_nav)
         self.assertEqual(active_nav["href"], "./synthesis.html")
 
-        # 6. Check pmidCache embedded in page
-        self.assertIn('"37047381"', html_content)
-        self.assertIn("Structure and function of CaV1.2 calcium channels.", html_content)
-        self.assertIn("Author A, ..., Author D", html_content)
+        # 6. Check live NCBI E-utilities fetch JS embedded in page (no local pmid-cache.js)
+        self.assertIn("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi", html_content)
+        self.assertIn('sessionStorage.getItem("sc_pmid_" + pmid)', html_content)
 
         # 7. Check ontology.html was generated and linked in navigation
         self.assertTrue((self.workspace / "ontology.html").is_file())
@@ -106,7 +111,7 @@ class RenderHtmlTests(unittest.TestCase):
 
         ont_html = (self.workspace / "ontology.html").read_text(encoding="utf-8")
         ont_soup = BeautifulSoup(ont_html, "html.parser")
-        ont_active_nav = ont_soup.find("a", class_="nav-link active")
+        ont_active_nav = ont_soup.find("a", class_="nav-dropdown-item active")
         self.assertIsNotNone(ont_active_nav)
         self.assertEqual(ont_active_nav["href"], "./ontology.html")
         self.assertIsNotNone(ont_soup.find("div", class_="kpi-grid"))

@@ -1551,12 +1551,16 @@ def process_markdown_file(
     raw_html = markdown.markdown(md_text, extensions=["tables", "fenced_code"])
     soup = BeautifulSoup(raw_html, "html.parser")
 
-    # 1. Rewrite internal .md links to .html (and human-decisions to user-decisions)
+    # 1. Rewrite internal .md links to .html (and per-PMID .md links to PubMed)
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if "human-decisions" in href:
             href = href.replace("human-decisions", "user-decisions")
-        if href.endswith(".md") or ".md#" in href:
+        m_pmid_md = re.search(r"(?:^|/)(\d{7,8})\.md(?:#.*)?$", href)
+        if m_pmid_md:
+            pmid = m_pmid_md.group(1)
+            href = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+        elif href.endswith(".md") or ".md#" in href:
             href = re.sub(r"\.md(\b|#)", r".html\1", href)
         a["href"] = href
 
@@ -2933,12 +2937,16 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
     raw_html = markdown.markdown(md_text, extensions=["tables", "fenced_code"])
     soup = BeautifulSoup(raw_html, "html.parser")
 
-    # Rewrite .md links in index.md
+    # Rewrite .md links in index.md (per-PMID .md links point to PubMed)
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if href.endswith(".md") or ".md#" in href:
+        m_pmid_md = re.search(r"(?:^|/)(\d{7,8})\.md(?:#.*)?$", href)
+        if m_pmid_md:
+            pmid = m_pmid_md.group(1)
+            href = f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"
+        elif href.endswith(".md") or ".md#" in href:
             href = re.sub(r"\.md(\b|#)", r".html\1", href)
-        if url_prefix == "./" and (href.startswith("./concepts/") or re.match(r"^\./\d+\.html", href)):
+        if url_prefix == "./" and href.startswith("./concepts/"):
             href = "./okf/" + href[2:]
         a["href"] = href
 
@@ -2952,6 +2960,8 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
             if "pmid-link" not in classes:
                 classes.append("pmid-link")
             a["class"] = classes
+            if "pubmed.ncbi.nlm.nih.gov" in a["href"]:
+                a["target"] = "_blank"
 
     # Convert H3 category sections under 'Ontology and Emerging Topic Reviews' (or Mini-Reviews) into collapsible details branches
     h2_ont = next((h for h in soup.find_all("h2") if "Reviews" in h.get_text()), None)
@@ -3038,7 +3048,7 @@ def _build_okf_interactive_html_body(ws: Path, index_md_path: Path, url_prefix: 
 
 
 def render_okf_html_pages(ws: Path, gene_symbol: str, pmid_cache: dict, nav_pages: list) -> list[str]:
-    """Render okf/index.md (to okf.html and okf/index.html), okf/<PMID>.md, and okf/concepts/<slug>.md."""
+    """Render okf/index.md (to okf.html and okf/index.html) and okf/concepts/<slug>.md."""
     okf_dir = ws / "okf"
     index_md = okf_dir / "index.md"
     if not index_md.exists():
@@ -3070,20 +3080,13 @@ def render_okf_html_pages(ws: Path, gene_symbol: str, pmid_cache: dict, nav_page
         out_file.write_text(page_html, encoding="utf-8")
         generated_okf.append(str(out_file))
 
-    # 2. Render per-PMID reference notes in okf/<PMID>.md -> okf/<PMID>.html
-    for md_file in sorted(okf_dir.glob("*.md")):
-        if md_file.name == "index.md":
-            continue
-        out_p = process_markdown_file(
-            md_file,
-            ws,
-            gene_symbol,
-            pmid_cache,
-            nav_pages=nav_pages,
-            nav_prefix="../",
-            active_key_override="okf",
-        )
-        generated_okf.append(str(out_p))
+    # 2. Remove any legacy per-PMID .html files under okf/ (keep only .md for atomic reference notes)
+    for stale_html in okf_dir.glob("*.html"):
+        if stale_html.name != "index.html":
+            try:
+                stale_html.unlink()
+            except OSError:
+                pass
 
     # 3. Render Concept and Emerging Topic Mini-Reviews in okf/concepts/<slug>.md -> okf/concepts/<slug>.html
     concepts_dir = okf_dir / "concepts"

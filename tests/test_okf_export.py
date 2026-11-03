@@ -251,11 +251,12 @@ class TestOkfExport(unittest.TestCase):
         self.assertIn("gene_concept", edge_types)
         self.assertNotIn("cooccurrence", edge_types)
 
-        # Check HTML rendering includes Open Knowledge (OKF) tab and Cytoscape visualizer
+        # Check HTML rendering includes Open Knowledge (OKF) tab and Cytoscape visualizer without per-PMID .html files
         html_res = self.store.render_html()
         self.assertTrue((self.ws / "okf.html").exists())
         self.assertTrue((self.ws / "okf" / "index.html").exists())
-        self.assertTrue((self.ws / "okf" / "29384712.html").exists())
+        self.assertFalse((self.ws / "okf" / "29384712.html").exists())
+        self.assertTrue((self.ws / "okf" / "29384712.md").exists())
         self.assertTrue((self.ws / "okf" / "concepts" / "drug--opioids.html").exists())
         self.assertTrue((self.ws / "okf" / "concepts" / "emerging--striatal-cfos-plasticity.html").exists())
 

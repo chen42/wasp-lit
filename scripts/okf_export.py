@@ -2440,12 +2440,18 @@ Across the **{ont_mr_count} ontology concepts** and **{em_mr_count} emerging top
     graph_file = store.base / "okf_graph.json"
     graph_file.write_text(json.dumps(graph_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    # 7. Clean up obsolete .md files in okf/ and okf/concepts/
+    # 7. Clean up obsolete .md and legacy per-PMID .html files in okf/ and okf/concepts/
     active_root_names = {f.name for f in generated_files if f.parent == okf_dir}
     for existing_file in okf_dir.glob("*.md"):
         if existing_file.name not in active_root_names:
             try:
                 existing_file.unlink()
+            except OSError:
+                pass
+    for existing_html in okf_dir.glob("*.html"):
+        if existing_html.name != "index.html":
+            try:
+                existing_html.unlink()
             except OSError:
                 pass
 
@@ -2765,7 +2771,6 @@ def _build_cytoscape_graph_data(
                     for c in (p_info["concepts"] + p_info["emerging_topics"])
                     if c in all_mini_reviews
                 ],
-                "note_url": f"./okf/{pmid}.html",
                 "md_url": f"./okf/{pmid}.md",
                 "pubmed_url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
             }
